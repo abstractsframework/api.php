@@ -27,6 +27,16 @@ class Validation {
 
   }
 
+  function set($parameters, $key) {
+    $result = true;
+    $message = $this->translation->translate("Parameters must contain") . " '" . $key . "'";
+    if (!isset($parameters[$key])) {
+      $result = false;
+      throw new Exception($message, 400);
+    }
+    return $result;
+  }
+
   function requires($value, $name) {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is required");
@@ -135,15 +145,15 @@ class Validation {
 
   function string_max($value, $name, $maximum) {
     $result = true;
-    $message = $this->translation->translate($name) . " " . $this->translation->translate("is shorter than maximum length of strings at") . " '" . $maximum . "' " . $this->translation->translate("character(s)");
+    $message = $this->translation->translate($name) . " " . $this->translation->translate("is longer than maximum length of strings at") . " '" . $maximum . "' " . $this->translation->translate("character(s)");
     if (!$this->is_empty($value)) {
       if (function_exists("mb_strlen")) {
-        if (mb_strlen($value) < $maximum) {
+        if (mb_strlen($value) > $maximum) {
           $result = false;
           throw new Exception($message, 400);
         }
       } else {
-        if (strlen($value) < $maximum) {
+        if (strlen($value) > $maximum) {
           $result = false;
           throw new Exception($message, 400);
         }
@@ -156,7 +166,7 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is less than minimum number at") . " '" . $minimum . "'";
     if (!$this->is_empty($value)) {
-      if (date_create($value) > date_create($minimum)) {
+      if (floatval($value) < floatval($minimum)) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -168,7 +178,7 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is more than maximum number at") . " '" . $maximum . "'";
     if (!$this->is_empty($value)) {
-      if (date_create($value) < date_create($maximum)) {
+      if (floatval($value) > floatval($maximum)) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -180,7 +190,7 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is before minimum date at") . " '" . $minimum . "'";
     if (!$this->is_empty($value)) {
-      if (date_create($value) > date_create($minimum)) {
+      if (date_create($value) < date_create($minimum)) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -192,7 +202,7 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is after maximum date at") . " '" . $maximum . "'";
     if (!$this->is_empty($value)) {
-      if (date_create($value) < date_create($maximum)) {
+      if (date_create($value) > date_create($maximum)) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -204,7 +214,7 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is before minimum date and time at") . " '" . $minimum . "'";
     if (!$this->is_empty($value)) {
-      if (date_create($value) > date_create($minimum)) {
+      if (date_create($value) < date_create($minimum)) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -216,7 +226,7 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is after maximum date and time at") . " '" . $maximum . "'";
     if (!$this->is_empty($value)) {
-      if (date_create($value) < date_create($maximum)) {
+      if (date_create($value) > date_create($maximum)) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -245,16 +255,21 @@ class Validation {
 
   function no_special_characters($value, $name, $level = "basic") {
     $result = true;
-    $message = $this->translation->translate($name) . " " . $this->translation->translate("does not allow special characters and white spaces excluding ., -, _");
-    $pattern = "/[^a-zA-Z\d\.\-]/";
-    if ($level == "strict") {
-      $pattern = "/[^a-zA-Z\d]/";
-      $message = $this->translation->translate($name) . " " . $this->translation->translate("does not allow special characters and white spaces");
-    }
+    $pattern = "/[^a-zA-Z\d\.\_]/";
+    $message = $this->translation->translate($name) . " " . $this->translation->translate("does not allow special characters and white spaces excluding ., _");
+    $pattern_strict = "/[^a-zA-Z\d]/";
+    $message_strict = $this->translation->translate($name) . " " . $this->translation->translate("does not allow special characters and white spaces");
     if (!$this->is_empty($value)) {
-      if (!preg_match($pattern, $value)) {
-        $result = false;
-        throw new Exception($message, 400);
+      if ($level != "strict") {
+        if (preg_match($pattern, $value)) {
+          $result = false;
+          throw new Exception($message, 400);
+        }
+      } else {
+        if (!preg_match($pattern_strict, $value)) {
+          $result = false;
+          throw new Exception($message_strict, 400);
+        }
       }
     }
     return $result;
@@ -315,10 +330,12 @@ class Validation {
     $message = $this->translation->translate($name) . " " . $this->translation->translate("can not be duplicated");
     if (!$this->is_empty($value)) {
       $extensions = array(
-        "conjunction" => "",
-        "key" => "`" . $key . "`",
-        "operator" => "LIKE",
-        "value" => "'" . $value . "'",
+        array(
+          "conjunction" => "",
+          "key" => "`" . $key . "`",
+          "operator" => "LIKE",
+          "value" => "'" . $value . "'"
+        )
       );
       if ($excluding_id) {
         array_push(
