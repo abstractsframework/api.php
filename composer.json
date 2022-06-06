@@ -2,7 +2,7 @@
     "name": "abstracts/api",
     "description": "Framework that lets you create scalable platforms with no-code",
     "license": "proprietary",
-    "type": "project",
+    "type": "library",
     "autoload": {
         "psr-4": {
             "Abstractsf\\Api\\": "src/"
