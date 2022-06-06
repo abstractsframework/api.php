@@ -1,0 +1,21 @@
+{
+    "name": "abstracts/api",
+    "description": "Framework that lets you create scalable platforms with no-code",
+    "license": "proprietary",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "Abstractsf\\Api\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Patiparnne Vongchompue",
+            "email": "partyparti@gmail.com"
+        }
+    ],
+    "require": {
+        "firebase/php-jwt": "^5.4",
+        "phpmailer/phpmailer": "^6.5"
+    }
+}
