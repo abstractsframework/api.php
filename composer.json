@@ -5,7 +5,8 @@
     "type": "library",
     "autoload": {
         "psr-4": {
-            "Abstracts\\Core\\": "src/"
+            "Abstracts\\Core\\": "src/",
+            "classmap": ["src/"]
         }
     },
     "authors": [
