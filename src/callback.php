@@ -1,5 +1,5 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Core;
 
 class Callback {
 

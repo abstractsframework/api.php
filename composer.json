@@ -1,11 +1,11 @@
 {
-    "name": "abstracts/api",
+    "name": "abstracts/core",
     "description": "Framework that lets you create scalable platforms with no-code",
     "license": "proprietary",
     "type": "library",
     "autoload": {
         "psr-4": {
-            "Abstracts\\": "src/"
+            "Abstracts\\Core\\": "src/"
         }
     },
     "authors": [

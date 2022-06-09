@@ -1,5 +1,7 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Core;
+
+use \Abstracts\Core\Database;
 
 class Utilities {
 
@@ -103,11 +105,11 @@ class Utilities {
     // Restore octets.
     $text = preg_replace('|---([a-fA-F0-9][a-fA-F0-9])---|', '%$1', $text);
   
-    if (is_utf8($text)) {
+    if ($this->is_utf8($text)) {
       if (function_exists('mb_strtolower')) {
         $text = mb_strtolower($text, 'UTF-8');
       }
-      $text = utf8_url_encode($text, 1000);
+      $text = $this->utf8_url_encode($text, 1000);
     }
   
     $text = strtolower($text);
@@ -122,27 +124,90 @@ class Utilities {
     
   }
 
-  public static function get_device() {
+  function utf8_url_encode( $utf8_string, $length = 0 ) {
 
-    $user_agent = $_SERVER["HTTP_USER_AGENT"];
-    
-    $response = array(
-      "status" => true,
-      "data" => array(
-        "platform" => get_platform($user_agent),
-        "browser" => get_client($user_agent),
-        "os" => get_os($user_agent),
-        "is_mobile" => is_mobile($user_agent),
-        "is_native" => is_native($user_agent)
-      )
-    );
+    $unicode = '';
+    $values = array();
+    $num_octets = 1;
+    $unicode_length = 0;
   
-    $result = resolve($response, "data", __FUNCTION__);
-    
-    unset($response);
-    unset($method);
-    return $result;
+    $string_length = strlen( $utf8_string );
+    for ($i = 0; $i < $string_length; $i++ ) {
   
+      $value = ord( $utf8_string[ $i ] );
+  
+      if ( $value < 128 ) {
+        if ( $length && ( $unicode_length >= $length ) )
+          break;
+        $unicode .= chr($value);
+        $unicode_length++;
+      } else {
+          if ( count( $values ) == 0 ) $num_octets = ( $value < 224 ) ? 2 : 3;
+  
+          $values[] = $value;
+  
+          if ( $length && ( $unicode_length + ($num_octets * 3) ) > $length )
+              break;
+          if ( count( $values ) == $num_octets ) {
+              if ($num_octets == 3) {
+                  $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]) . '%' . dechex($values[2]);
+                  $unicode_length += 9;
+              } else {
+                  $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]);
+                  $unicode_length += 6;
+              }
+  
+              $values = array();
+              $num_octets = 1;
+          }
+      }
+  
+    }
+  
+    return $unicode;
+  
+  }
+
+  public static function get_class_name($key) {
+    if (!empty($key)) {
+      $parts = explode("_", $key);
+      $formats = array();
+      foreach($parts as $part) {
+        array_push($formats, ucfirst($part));
+      }
+      $parts = explode("-", implode("", $formats));
+      $formats = array();
+      foreach($parts as $part) {
+        array_push($formats, ucfirst($part));
+      }
+      return implode("", $formats);
+    } else {
+      return null;
+    }
+  }
+
+  public static function sync_module($config, $database_table) {
+    if (!empty($database_table)) {
+      $database = new Database($config);
+      $filters = array(
+        "database_table" => $database_table
+      );
+      $module_data = $database->select(
+        "module", 
+        "*", 
+        $filters, 
+        null, 
+        true
+      );
+      if (!empty($module_data) && isset($module_data->default_control)) {
+        $module_data->default_control = explode(",", $module_data->default_control);
+      } else {
+        $module_data->default_control = array();
+      }
+      return $module_data;
+    } else {
+      return null;
+    }
   }
 
   public static function sync_control(
@@ -176,6 +241,25 @@ class Utilities {
       }
     }
     return $controls;
+  }
+
+  function is_utf8($str) {
+    $length = strlen($str);
+    for ($i=0; $i < $length; $i++) {
+        $c = ord($str[$i]);
+        if ($c < 0x80) $n = 0; # 0bbbbbbb
+        elseif (($c & 0xE0) == 0xC0) $n=1; # 110bbbbb
+        elseif (($c & 0xF0) == 0xE0) $n=2; # 1110bbbb
+        elseif (($c & 0xF8) == 0xF0) $n=3; # 11110bbb
+        elseif (($c & 0xFC) == 0xF8) $n=4; # 111110bb
+        elseif (($c & 0xFE) == 0xFC) $n=5; # 1111110b
+        else return false; # Does not match any model
+        for ($j=0; $j<$n; $j++) { # n bytes matching 10bbbbbb follow ?
+            if ((++$i == $length) || ((ord($str[$i]) & 0xC0) != 0x80))
+                return false;
+        }
+    }
+    return true;
   }
   
   public static function generate_thumbnail($source, $destination, $target_width, $target_height = null, $aspectratio = true, $quality = 100) {

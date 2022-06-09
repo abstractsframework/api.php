@@ -1,9 +1,35 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Core;
 
 use DateTimeZone;
 
 class Initialization {
+  
+  public static function load($config, $paths = array()) {
+    if (!empty($config)) {
+      if (isset($config["services_path"])) {
+        array_push($paths, ("../" . $config["services_path"]));
+      }
+      if (isset($config["callback_path"])) {
+        array_push($paths, ("../" . $config["callback_path"]));
+      }
+    }
+    $exceptions = array(
+      "initial.php"
+    );
+    foreach($paths as $path) {
+      $files = scandir($path);
+      foreach($files as $file) {
+        $info = pathinfo($file);
+        if (isset($info["extension"])) {
+          $extension = strtolower($info["extension"]);
+          if ($extension == "php" && !in_array($file, $exceptions)) {
+            require_once($path . "/" . $file);
+          }
+        }
+      }
+    }
+  }
 
   public static function headers($config) {
 
@@ -23,11 +49,31 @@ class Initialization {
 
   }
 
-  public static function response_limit($seconds = 5) {
+  public static function response_headers($config) {
+
+    if (isset($_SERVER["HTTP_ORIGIN"])) {
+      header("Access-Control-Allow-Origin: *");
+      header("Access-Control-Request-Headers: *");
+    }
+    if ($_SERVER["REQUEST_METHOD"] == "OPTIONS") {
+      if (isset($_SERVER["HTTP_ACCESS_CONTROL_REQUEST_METHOD"])) {
+        header("Access-Control-Allow-Methods: GET, POST, PUT, PATCH, COPY, DELETE, OPTIONS");
+      }
+      if (isset($_SERVER["HTTP_ACCESS_CONTROL_REQUEST_HEADERS"])) {
+        header("Access-Control-Allow-Headers: Access-Control-Allow-Origin, Access-Control-Allow-Methods, Content-Type, Authorization, Key, Secret, Token, Lock, Language");
+      }
+      exit(0);
+    }
+
+    header("Content-Type: application/json");
+
+  }
+
+  public static function timeout($seconds = 5) {
     set_time_limit($seconds);
   }
 
-  public static function display_erros($display = false) {
+  public static function display_errors($display = false) {
     ini_set("display_errors", ($display ? "On" : "Off"));
     ini_set("error_reporting", E_ALL);
   }

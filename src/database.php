@@ -1,7 +1,7 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Core;
 
-use \Abstracts\Translation;
+use \Abstracts\Core\Translation;
 
 use Exception;
 
@@ -138,7 +138,7 @@ class Database {
         $error = true;
       }
   
-      if ($error) {var_dump($sql);
+      if ($error) {
         throw new Exception($this->translation->translate("Database encountered error"), 500);
       }
 
@@ -210,7 +210,7 @@ class Database {
         $error = true;
       }
 
-      if ($error) {var_dump($sql);
+      if ($error) {
         throw new Exception($this->translation->translate("Database encountered error"), 500);
       }
 
@@ -277,7 +277,7 @@ class Database {
         $error = true;
       }
 
-      if ($error) {var_dump($sql);
+      if ($error) {
         throw new Exception($this->translation->translate("Database encountered error"), 500);
       }
 
@@ -324,6 +324,7 @@ class Database {
         INSERT INTO `" . $table . "`
         (" . implode(", ", $keys) . ") 
         VALUES (" . implode(", ", $values) . ");";
+        
         $error = false;
   
         $connection = $this->connect();
@@ -341,7 +342,7 @@ class Database {
           $error = true;
         }
 
-        if ($error) {var_dump($sql);
+        if ($error) {
           throw new Exception($this->translation->translate("Database encountered error"), 500);
         }
 
@@ -422,7 +423,7 @@ class Database {
           $error = true;
         }
 
-        if ($error) {var_dump($sql);
+        if ($error) {
           throw new Exception($this->translation->translate("Database encountered error"), 500);
         }
 
@@ -490,7 +491,7 @@ class Database {
         $error = true;
       }
 
-      if ($error) {var_dump($sql);
+      if ($error) {
         throw new Exception($this->translation->translate("Database encountered error"), 500);
       }
 
@@ -565,7 +566,7 @@ class Database {
         $error = true;
       }
 
-      if ($error) {var_dump($sql);
+      if ($error) {
         throw new Exception($this->translation->translate("Database encountered error"), 500);
       }
 
@@ -596,27 +597,32 @@ class Database {
       $conditions = $this->condition($filters, $extensions, $controls);
 
       $data_current = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, $controls);
+      if (!empty($data_current) && count($data_current)) {
 
-      $sql = "
-      DELETE FROM `" . $table . "`
-      " . $conditions . ";";
-
-      $error = false;
-
-      $connection = $this->connect();
-      if ($connection) {
-        if (mysqli_query($connection, $sql)) {
-          $data = $data_current;
+        $sql = "
+        DELETE FROM `" . $table . "`
+        " . $conditions . ";";
+  
+        $error = false;
+  
+        $connection = $this->connect();
+        if ($connection) {
+          if (mysqli_query($connection, $sql)) {
+            $data = $data_current;
+          } else {
+            $error = true;
+          }
+          $this->disconnect($connection);
         } else {
           $error = true;
         }
-        $this->disconnect($connection);
+  
+        if ($error) {
+          throw new Exception($this->translation->translate("Database encountered error"), 500);
+        }
+        
       } else {
-        $error = true;
-      }
-
-      if ($error) {var_dump($sql);
-        throw new Exception($this->translation->translate("Database encountered error"), 500);
+        throw new Exception($this->translation->translate("Not found"), 404);
       }
 
     } else {
@@ -673,7 +679,7 @@ class Database {
         $error = true;
       }
 
-      if ($error) {var_dump($sql);
+      if ($error) {
         throw new Exception($this->translation->translate("Database encountered error"), 500);
       }
 
@@ -706,48 +712,6 @@ class Database {
       } else {
         $data .= "asc ";
       }
-    }
-    return $data;
-  }
-
-  function filter($filters) {
-    $data = "";
-    if (isset($filters) && !empty($filters) && is_array($filters) && count($filters)) {
-      $sql = array();
-      foreach($filters as $key => $value) {
-        if (isset($value)) {
-          array_push($sql, "`" . $key . "` = '" . $value . "'");
-        }
-      }
-      $data = " AND " . implode(" AND ", $sql) . " ";
-    }
-    return $data;
-  }
-
-  function extend($extensions) {
-    $data = "";
-    if (isset($extensions) && !empty($extensions) && is_array($extensions) && count($extensions)) {
-      $data = " AND (";
-      for ($i = 0; $i < count($extensions); $i++) {
-        if (isset($extensions[$i]["extensions"]) 
-        && is_array($extensions[$i]["extensions"])) {
-          $data .= $extensions[$i]["conjunction"] . " (";
-          $data .= extend($extensions[$i]["extensions"]);
-          $data .= ") ";
-        } else {
-          $trimmed = trim($extensions[$i]["value"], "\'");
-          if (strlen($trimmed) < strlen($extensions[$i]["value"])) {
-            $value = "'" . $trimmed . "'";
-          } else {
-            $value = $trimmed;
-          }
-          $data .= $extensions[$i]["conjunction"] . " " 
-          . $extensions[$i]["key"] . " " 
-          . $extensions[$i]["operator"] . " " 
-          . $value . " ";
-        }
-      }
-      $data .= ")";
     }
     return $data;
   }
@@ -790,7 +754,14 @@ class Database {
     if (isset($filters) && !empty($filters) && is_array($filters) && count($filters)) {
       foreach($filters as $key => $value) {
         if (isset($value)) {
-          array_push($data, "`" . $key . "` = '" . $value . "'");
+          if (is_string($value) || $value === "") {
+            $value = "'" . $value . "'";
+          } else if (is_null($value)) {
+            $value = "NULL";
+          } else if (is_bool($value)) {
+            $value = (!empty($value) ? "true" : "false");
+          }
+          array_push($data, "`" . $key . "` = " . $value);
         }
       }
     }
@@ -974,6 +945,7 @@ class Database {
     } else {
       $result = true;
     }
+    $result = true;
     if (!$result) {
       throw new Exception($this->translation->translate("Some parameters is not allowed"), 403);
     }

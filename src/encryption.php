@@ -1,5 +1,5 @@
 <?php 
-namespace Abstracts;
+namespace Abstracts\Core;
 
 use \Firebase\JWT\JWT;
 use \Firebase\JWT\JWK;

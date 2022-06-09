@@ -1,9 +1,10 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Core;
 
-use \Abstracts\Database;
-use \Abstracts\Utilities;
-use \Abstracts\User;
+use \Abstracts\Core\Database;
+use \Abstracts\Core\Utilities;
+use \Abstracts\Core\Encryption;
+use \Abstracts\Core\User;
 
 class Authorization {
 
@@ -13,6 +14,7 @@ class Authorization {
 
   /* helpers */
   private $utilities = null;
+  private $encryption = null;
 
   /* services */
   private $user = null;
@@ -22,6 +24,7 @@ class Authorization {
     $this->config = $config;
 
     $this->utilities = new Utilities();
+    $this->encryption = new Encryption();
 
     $this->user = new User($this->config);
     if ($this->user->module) {
@@ -56,7 +59,7 @@ class Authorization {
       }
       if (!is_null($authorization)) {
         if (isset($config["encrypt_authorization"]) && !empty($config["encrypt_authorization"])) {
-          $decoded = decode(
+          $decoded = $this->encryption->decode(
             $authorization, 
             $config["encrypt_ssl_public_key"], 
             $config["encrypt_authorization"]

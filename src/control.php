@@ -1,10 +1,10 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Core;
 
-use \Abstracts\Database;
-use \Abstracts\Validation;
-use \Abstracts\Translation;
-use \Abstracts\Utilities;
+use \Abstracts\Core\Database;
+use \Abstracts\Core\Validation;
+use \Abstracts\Core\Translation;
+use \Abstracts\Core\Utilities;
 
 use Exception;
 
@@ -31,17 +31,17 @@ class Control {
     $config,
     $session = null,
     $controls = null,
-    $module = null
+    $identifier = null
   ) {
 
-    $this->module = $module;
     $this->config = $config;
     $this->session = $session;
+    $this->module = Utilities::sync_module($config, $identifier);
     $this->controls = Utilities::sync_control(
       $this->id, 
       $session, 
       $controls,
-      $module
+      $this->module
     );
     
     $this->database = new Database($this->config, $this->session, $this->controls);
