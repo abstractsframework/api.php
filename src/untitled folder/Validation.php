@@ -1,9 +1,9 @@
 <?php
-namespace Abstracts\Core;
+namespace Abstracts;
 
-use \Abstracts\Core\Database;
-use \Abstracts\Core\Translation;
-use \Abstracts\Core\Utilities;
+use \Abstracts\Database;
+use \Abstracts\Translation;
+use \Abstracts\Utilities;
 
 use Exception;
 

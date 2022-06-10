@@ -1,13 +1,13 @@
 <?php
-namespace Abstracts\Core;
+namespace Abstracts;
 
-use \Abstracts\Core\Database;
-use \Abstracts\Core\Validation;
-use \Abstracts\Core\Translation;
-use \Abstracts\Core\Utilities;
-use \Abstracts\Core\Encryption;
-use \Abstracts\Core\API;
-use \Abstracts\Core\Device;
+use \Abstracts\Database;
+use \Abstracts\Validation;
+use \Abstracts\Translation;
+use \Abstracts\Utilities;
+use \Abstracts\Encryption;
+use \Abstracts\API;
+use \Abstracts\Device;
 
 use Exception;
 

@@ -1,12 +1,12 @@
 <?php
-namespace Abstracts\Core;
+namespace Abstracts;
 
-use \Abstracts\Core\Route;
-use \Abstracts\Core\Utilities;
-use \Abstracts\Core\Translation;
-use \Abstracts\Core\Initialization;
-use \Abstracts\Core\User;
-use \Abstracts\Core\Built;
+use \Abstracts\Route;
+use \Abstracts\Utilities;
+use \Abstracts\Translation;
+use \Abstracts\Initialization;
+use \Abstracts\User;
+use \Abstracts\Built;
 
 use Exception;
 
@@ -40,7 +40,7 @@ class Render {
       $route = new Route($this->config);
       if ($route->request) {
         if ($route->request->class && $route->request->function) {
-          $namespace = "\\Abstracts\\Core\\" . $route->request->class;
+          $namespace = "\\Abstracts\\" . $route->request->class;
           $utilities = new Utilities();
           $parameters = $utilities->format_request();
           if (class_exists($namespace)) {
@@ -84,7 +84,7 @@ class Render {
                   throw new Exception($e->getMessage(), $e->getCode());
                 }
               }
-            } else if (method_exists("\\Abstracts\\Core\\Built", $route->request->function)) {
+            } else if (method_exists("\\Abstracts\\Built", $route->request->function)) {
               $built = new Built($this->config, $session, null, $route->request->module);
               $data = $built->request($route->request->function, $parameters);
               // if (is_null($data) || is_bool($data)) {
@@ -105,7 +105,7 @@ class Render {
               throw new Exception($message[404], 404);
             }
           } else {
-            if (method_exists("\\Abstracts\\Core\\Built", $route->request->function)) {
+            if (method_exists("\\Abstracts\\Built", $route->request->function)) {
               $built = new Built($this->config, $session, null, $route->request->module);
               $data = $built->request($route->request->function, $parameters);
               // if (is_null($data) || is_bool($data)) {

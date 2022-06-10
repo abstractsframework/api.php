@@ -1,7 +1,7 @@
 <?php
-namespace Abstracts\Core;
+namespace Abstracts;
 
-use \Abstracts\Core\Translation;
+use \Abstracts\Translation;
 
 use Exception;
 

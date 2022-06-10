@@ -1,10 +1,10 @@
 <?php
-namespace Abstracts\Core;
+namespace Abstracts;
 
-use \Abstracts\Core\Database;
-use \Abstracts\Core\Utilities;
-use \Abstracts\Core\Encryption;
-use \Abstracts\Core\User;
+use \Abstracts\Database;
+use \Abstracts\Utilities;
+use \Abstracts\Encryption;
+use \Abstracts\User;
 
 class Authorization {
 

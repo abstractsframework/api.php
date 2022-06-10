@@ -1,7 +1,7 @@
 <?php
-namespace Abstracts\Core;
+namespace Abstracts;
 
-use \Abstracts\Core\Database;
+use \Abstracts\Database;
 
 class Utilities {
 

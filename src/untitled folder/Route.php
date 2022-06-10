@@ -1,8 +1,8 @@
 <?php
-namespace Abstracts\Core;
+namespace Abstracts;
 
-use \Abstracts\Core\Database;
-use \Abstracts\Core\Utilities;
+use \Abstracts\Database;
+use \Abstracts\Utilities;
 
 class Route {
 

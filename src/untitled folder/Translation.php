@@ -1,5 +1,5 @@
 <?php
-namespace Abstracts\Core;
+namespace Abstracts;
 
 class Translation {
 
