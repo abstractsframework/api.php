@@ -1,12 +1,12 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Helpers;
 
-use \Abstracts\Database;
-use \Abstracts\Utilities;
+use \Abstracts\Helpers\Database;
+use \Abstracts\Helpers\Utilities;
 
 class Route {
 
-  /* initialization */
+  /* core */
   private $config = null;
   
   public $path = "";
@@ -15,6 +15,7 @@ class Route {
 
   function __construct($config) {
     
+    /* initialize: core */
     $this->config = $config;
 
     $this->initialize();

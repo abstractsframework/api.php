@@ -1,10 +1,10 @@
 <?php
 namespace Abstracts;
 
-use \Abstracts\Database;
-use \Abstracts\Validation;
-use \Abstracts\Translation;
-use \Abstracts\Utilities;
+use \Abstracts\Helpers\Database;
+use \Abstracts\Helpers\Validation;
+use \Abstracts\Helpers\Translation;
+use \Abstracts\Helpers\Utilities;
 
 use Exception;
 
@@ -13,8 +13,9 @@ class Abstracts {
   /* configuration */
   private $id = "1";
   private $public_functions = array();
+  private $allowed_keys = array();
 
-  /* initialization */
+  /* core */
   public $module = null;
   private $config = null;
   private $session = null;
@@ -33,6 +34,7 @@ class Abstracts {
     $identifier = null
   ) {
 
+    /* initialize: core */
     $this->config = $config;
     $this->session = $session;
     $this->module = Utilities::sync_module($config, $identifier);
@@ -43,16 +45,18 @@ class Abstracts {
       $this->module
     );
     
+    /* initialize: helpers */
     $this->database = new Database($this->config, $this->session, $this->controls);
     $this->validation = new Validation($this->config);
     $this->translation = new Translation();
     $this->utilities = new Utilities();
 
+    /* initialize: module */
     $this->initialize();
 
   }
 
-  function initialize() {
+  private function initialize() {
     if (empty($this->module)) {
       $this->module = $this->database->select(
         "module", 
@@ -109,8 +113,6 @@ class Abstracts {
       } else {
         throw new Exception($this->translation->translate("Function not supported"), 421);
       }
-    } else {
-      throw new Exception($this->translation->translate("Permission denied"), 403);
     }
     return $result;
   }
@@ -126,7 +128,8 @@ class Abstracts {
         "*", 
         array("id" => $id), 
         null, 
-        true
+        true,
+        $this->allowed_keys
       );
       if (!empty($data)) {
         return $this->callback(__METHOD__, func_get_args(), $this->format($data));

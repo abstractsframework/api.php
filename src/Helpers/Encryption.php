@@ -1,5 +1,5 @@
 <?php 
-namespace Abstracts;
+namespace Abstracts\Helpers;
 
 use \Firebase\JWT\JWT;
 use \Firebase\JWT\JWK;
@@ -86,11 +86,7 @@ class Encryption {
     }
     $datetime_data = date("Ymd_His");
     $encrypted_data = md5($datetime_data . "_" . $random_data);
-    if (strlen($data) != mb_strlen($data, 'utf-8')) {
-      $data_new = str_replace(" ", "_", $data).'_'.$encrypted_data;
-    } else {
-      $data_new = str_replace(" ", "_", $data).'_'.$encrypted_data;
-    }
+    $data_new = str_replace(" ", "_", $data) . "_" . $encrypted_data;
     
     $data_new = trim($data_new);
     $data_new = preg_replace('!\s+!', ' ', $data_new);

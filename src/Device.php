@@ -1,10 +1,10 @@
 <?php
 namespace Abstracts;
 
-use \Abstracts\Database;
-use \Abstracts\Validation;
-use \Abstracts\Translation;
-use \Abstracts\Utilities;
+use \Abstracts\Helpers\Database;
+use \Abstracts\Helpers\Validation;
+use \Abstracts\Helpers\Translation;
+use \Abstracts\Helpers\Utilities;
 
 use Exception;
 
@@ -12,10 +12,10 @@ class Device {
 
   /* configuration */
   private $id = "19";
-  private $public_functions = array(
-	);
+  private $public_functions = array();
+  private $allowed_keys = array();
 
-  /* initialization */
+  /* core */
   public $module = null;
   private $config = null;
   private $session = null;
@@ -34,6 +34,7 @@ class Device {
     $identifier = null
   ) {
 
+    /* initialize: core */
     $this->config = $config;
     $this->session = $session;
     $this->module = Utilities::sync_module($config, $identifier);
@@ -44,16 +45,18 @@ class Device {
       $this->module
     );
     
+    /* initialize: helpers */
     $this->database = new Database($this->config, $this->session, $this->controls);
     $this->validation = new Validation($this->config);
     $this->translation = new Translation();
     $this->utilities = new Utilities();
 
+    /* initialize: module */
     $this->initialize();
 
   }
 
-  function initialize() {
+  private function initialize() {
     if (empty($this->module)) {
       $this->module = $this->database->select(
         "module", 

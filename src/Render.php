@@ -1,10 +1,11 @@
 <?php
 namespace Abstracts;
 
-use \Abstracts\Route;
-use \Abstracts\Utilities;
-use \Abstracts\Translation;
-use \Abstracts\Initialization;
+use \Abstracts\Helpers\Route;
+use \Abstracts\Helpers\Utilities;
+use \Abstracts\Helpers\Translation;
+use \Abstracts\Helpers\Initialization;
+
 use \Abstracts\User;
 use \Abstracts\Built;
 
@@ -12,6 +13,7 @@ use Exception;
 
 class Render {
 
+  /* core */
   private $config = null;
   
   function __construct($config) {
@@ -29,7 +31,7 @@ class Render {
       $translation = new Translation();
       
       $user = new User($this->config);
-      $session = $user->authenticate();
+      $session = $user->authenticate(null, false);
       
       $message = array(
         400 => $translation->translate("Bad request"),
@@ -41,66 +43,16 @@ class Render {
       if ($route->request) {
         if ($route->request->class && $route->request->function) {
           $namespace = "\\Abstracts\\" . $route->request->class;
-          $utilities = new Utilities();
-          $parameters = $utilities->format_request();
+          $parameters = Utilities::format_request();
           if (class_exists($namespace)) {
             if (method_exists($namespace, $route->request->function)) {
               $class = new $namespace($this->config, $session, null, $route->request->module);
-              try {
-                $data = $class->request($route->request->function, $parameters);
-                // if (is_null($data) || is_bool($data)) {
-                //   if (is_null($data) || $data === false) {
-                //     throw new Exception($message[409], 409);
-                //   } else {
-                //     echo json_encode(
-                //       array(
-                //         "result" => $data
-                //       )
-                //     );
-                //   }
-                // } else {
-                //   echo json_encode($data);
-                // }
-                echo json_encode($data);
-              } catch(Exception $e) {
-                if ($e->getCode() == 421) {
-                  $built = new Built($this->config, $session, null, $route->request->module);
-                  $data = $built->request($route->request->function, $parameters);
-                  // if (is_null($data) || is_bool($data)) {
-                  //   if (is_null($data) || $data === false) {
-                  //     throw new Exception($message[409], 409);
-                  //   } else {
-                  //     echo json_encode(
-                  //       array(
-                  //         "result" => $data
-                  //       )
-                  //     );
-                  //   }
-                  // } else {
-                  //   echo json_encode($data);
-                  // }
-                  echo json_encode($data);
-                } else {
-                  throw new Exception($e->getMessage(), $e->getCode());
-                }
-              }
+              $data = $class->request($route->request->function, $parameters);
+              echo Utilities::handle_response($data);
             } else if (method_exists("\\Abstracts\\Built", $route->request->function)) {
               $built = new Built($this->config, $session, null, $route->request->module);
               $data = $built->request($route->request->function, $parameters);
-              // if (is_null($data) || is_bool($data)) {
-              //   if (is_null($data) || $data === false) {
-              //     throw new Exception($message[409], 409);
-              //   } else {
-              //     echo json_encode(
-              //       array(
-              //         "result" => $data
-              //       )
-              //     );
-              //   }
-              // } else {
-              //   echo json_encode($data);
-              // }
-              echo json_encode($data);
+              echo Utilities::handle_response($data);
             } else {
               throw new Exception($message[404], 404);
             }
@@ -108,20 +60,7 @@ class Render {
             if (method_exists("\\Abstracts\\Built", $route->request->function)) {
               $built = new Built($this->config, $session, null, $route->request->module);
               $data = $built->request($route->request->function, $parameters);
-              // if (is_null($data) || is_bool($data)) {
-              //   if (is_null($data) || $data === false) {
-              //     throw new Exception($message[409], 409);
-              //   } else {
-              //     echo json_encode(
-              //       array(
-              //         "result" => $data
-              //       )
-              //     );
-              //   }
-              // } else {
-              //   echo json_encode($data);
-              // }
-              echo json_encode($data);
+              echo Utilities::handle_response($data);
             } else {
               throw new Exception($message[404], 404);
             }
@@ -135,7 +74,7 @@ class Render {
     
     } catch(Exception $e) {
       header($e->getMessage(), true, $e->getCode());
-      echo json_encode(
+      echo Utilities::handle_response(
         array(
           "status" => false,
           "code" => $e->getCode(),

@@ -1,5 +1,5 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Helpers;
 
 use DateTimeZone;
 

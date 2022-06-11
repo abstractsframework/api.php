@@ -1,15 +1,15 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Helpers;
 
-use \Abstracts\Database;
-use \Abstracts\Translation;
-use \Abstracts\Utilities;
+use \Abstracts\Helpers\Database;
+use \Abstracts\Helpers\Translation;
+use \Abstracts\Helpers\Utilities;
 
 use Exception;
 
 class Validation {
 
-  /* initialization */
+  /* core */
   private $config = null;
 
   /* helpers */
@@ -19,8 +19,10 @@ class Validation {
 
   function __construct($config) {
 
+    /* initialize: core */
     $this->config = $config;
 
+    /* initialize: helpers */
     $this->database = new Database($this->config);
     $this->translation = new Translation();
     $this->utilities = new Utilities();
@@ -51,9 +53,8 @@ class Validation {
   function number($value, $name) {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("allows only numbers");
-    $pattern = "/^(?:-?\d+|-?\d{1,3}(?:,\d{3})+)?(?:\.\d+)?$/";
     if (!$this->is_empty($value)) {
-      if (!preg_match($pattern, $value)) {
+      if (!is_numeric($value)) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -65,9 +66,18 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is less than minimum number at") . " '" . $minimum . "'";
     if (!$this->is_empty($value)) {
-      if (intval($value) < intval($minimum)) {
+      if ($this->number($value, $name)) {
+        if ($this->number($minimum, $name)) {
+          if (intval($value) < intval($minimum)) {
+            $result = false;
+            throw new Exception($message, 400);
+          }
+        } else {
+          $result = false;
+          throw new Exception($this->translation->translate("Criteria") . " " . $this->translation->translate("allows only numbers"), 500);
+        }
+      } else {
         $result = false;
-        throw new Exception($message, 400);
       }
     }
     return $result;
@@ -77,9 +87,18 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is more than maximum number at") . " '" . $maximum . "'";
     if (!$this->is_empty($value)) {
-      if (intval($value) > intval($maximum)) {
+      if ($this->number($value, $name)) {
+        if ($this->number($maximum, $name)) {
+          if (intval($value) > intval($maximum)) {
+            $result = false;
+            throw new Exception($message, 400);
+          }
+        } else {
+          $result = false;
+          throw new Exception($this->translation->translate("Criteria") . " " . $this->translation->translate("allows only numbers"), 500);
+        }
+      } else {
         $result = false;
-        throw new Exception($message, 400);
       }
     }
     return $result;
@@ -88,9 +107,8 @@ class Validation {
   function decimal($value, $name) {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("allows only decimal");
-    $pattern = "/^[0-9.]+$/";
     if (!$this->is_empty($value)) {
-      if (!preg_match($pattern, $value)) {
+      if (!is_numeric(str_replace(",", "", $value))) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -102,9 +120,18 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is less than minimum number at") . " '" . $minimum . "'";
     if (!$this->is_empty($value)) {
-      if (floatval($value) < floatval($minimum)) {
+      if ($this->decimal($value, $name)) {
+        if ($this->decimal($minimum, $name)) {
+          if (floatval(str_replace(",", "", $value)) < floatval(str_replace(",", "", $minimum))) {
+            $result = false;
+            throw new Exception($message, 400);
+          }
+        } else {
+          $result = false;
+          throw new Exception($this->translation->translate("Criteria") . " " . $this->translation->translate("allows only decimal"), 500);
+        }
+      } else {
         $result = false;
-        throw new Exception($message, 400);
       }
     }
     return $result;
@@ -114,9 +141,17 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is more than maximum number at") . " '" . $maximum . "'";
     if (!$this->is_empty($value)) {
-      if (floatval($value) > floatval($maximum)) {
+      if ($this->decimal($value, $name)) {
+        if ($this->decimal($maximum, $name)) {
+          if (floatval(str_replace(",", "", $value)) > floatval(str_replace(",", "", $maximum))) {
+            $result = false;
+            throw new Exception($message, 400);
+          }
+        } else {
+          $result = false;
+        }
+      } else {
         $result = false;
-        throw new Exception($message, 400);
       }
     }
     return $result;
@@ -126,7 +161,7 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("allows only date/time");
     if (!$this->is_empty($value)) {
-      if (!date_create($value)) {
+      if (!strtotime($value) && !strtotime($value . " 00:00:00")) {
         $result = false;
         throw new Exception($message, 400);
       }
@@ -138,9 +173,26 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is before minimum date and time at") . " '" . $minimum . "'";
     if (!$this->is_empty($value)) {
-      if (date_create($value) < date_create($minimum)) {
+      if ($this->datetime($value, $name)) {
+        if ($this->datetime($minimum, $name)) {
+          $datetime = strtotime($value . " 00:00:00");
+          if (strtotime($value)) {
+            $datetime = strtotime($value);
+          }
+          $minimum_datetime = strtotime($minimum . " 00:00:00");
+          if (strtotime($value)) {
+            $minimum_datetime = strtotime($minimum);
+          }
+          if ($datetime < $minimum_datetime) {
+            $result = false;
+            throw new Exception($message, 400);
+          }
+        } else {
+          $result = false;
+          throw new Exception($this->translation->translate("Criteria") . " " . $this->translation->translate("allows only date/time"), 500);
+        }
+      } else {
         $result = false;
-        throw new Exception($message, 400);
       }
     }
     return $result;
@@ -150,9 +202,26 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is after maximum date and time at") . " '" . $maximum . "'";
     if (!$this->is_empty($value)) {
-      if (date_create($value) > date_create($maximum)) {
-        $result = false;
-        throw new Exception($message, 400);
+      if ($this->datetime($value, $name)) {
+        if ($this->datetime($maximum, $name)) {
+          $datetime = strtotime($value . " 00:00:00");
+          if (strtotime($value)) {
+            $datetime = strtotime($value);
+          }
+          $maximum_datetime = strtotime($maximum . " 00:00:00");
+          if (strtotime($value)) {
+            $maximum_datetime = strtotime($maximum);
+          }
+          if ($datetime > $maximum_datetime) {
+            $result = false;
+            throw new Exception($message, 400);
+          }
+        } else {
+          $result = false;
+          throw new Exception($this->translation->translate("Criteria") . " " . $this->translation->translate("allows only date/time"), 500);
+        }
+      } else {
+
       }
     }
     return $result;
@@ -162,16 +231,9 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is shorter than minimum length of strings at") . " '" . $minimum . "' " . $this->translation->translate("character(s)");
     if (!$this->is_empty($value)) {
-      if (function_exists("mb_strlen")) {
-        if (mb_strlen($value) < $minimum) {
-          $result = false;
-          throw new Exception($message, 400);
-        }
-      } else {
-        if (strlen($value) < $minimum) {
-          $result = false;
-          throw new Exception($message, 400);
-        }
+      if (Utilities::length(strval($value)) < $minimum) {
+        $result = false;
+        throw new Exception($message, 400);
       }
     }
     return $result;
@@ -181,16 +243,9 @@ class Validation {
     $result = true;
     $message = $this->translation->translate($name) . " " . $this->translation->translate("is longer than maximum length of strings at") . " '" . $maximum . "' " . $this->translation->translate("character(s)");
     if (!$this->is_empty($value)) {
-      if (function_exists("mb_strlen")) {
-        if (mb_strlen($value) > $maximum) {
-          $result = false;
-          throw new Exception($message, 400);
-        }
-      } else {
-        if (strlen($value) > $maximum) {
-          $result = false;
-          throw new Exception($message, 400);
-        }
+      if (Utilities::length(strval($value)) > $maximum) {
+        $result = false;
+        throw new Exception($message, 400);
       }
     }
     return $result;
@@ -254,7 +309,7 @@ class Validation {
       $extensions = array(
         array(
           "conjunction" => "",
-          "key" => "`" . $key . "`",
+          "key" => $key,
           "operator" => "LIKE",
           "value" => "'" . $value . "'"
         )
@@ -264,7 +319,7 @@ class Validation {
           $extensions,
           array(
             "conjunction" => "AND",
-            "key" => "`id`",
+            "key" => "id",
             "operator" => "!=",
             "value" => "'" . $excluding_id . "'"
           )
@@ -280,7 +335,7 @@ class Validation {
         )
       ) {
         $result = false;
-        throw new Exception($message, 400);
+        throw new Exception($message, 409);
       }
     }
     return $result;
@@ -296,7 +351,7 @@ class Validation {
           throw new Exception($message, 400);
         }
       } else {
-        if (!$this->is_empty(strpos($value, " "))) {
+        if (strpos($value, " ") >= 0) {
           $result = false;
           throw new Exception($message, 400);
         }
@@ -414,14 +469,25 @@ class Validation {
         foreach($values as $key => $value) {
           if (is_array($value)) {
             foreach($value as $value_key => $value_value) {
-              if (
-                $value_key != "conjunction" 
-                && $value_key != "key"
-                && $value_key != "operator"
-                && $value_key != "value"
-                && $value_key != "extended_command"
-              ) {
-                $error = true;
+              if ($value_key == "extensions") {
+                $error = !$this->extensions($value_value);
+              } else {
+                if (
+                  $value_key != "conjunction" 
+                  && $value_key != "key"
+                  && $value_key != "operator"
+                  && $value_key != "value"
+                  && $value_key != "extensions"
+                ) {
+                  $error = true;
+                } else {
+                  if (
+                    $value_key == "operator" 
+                    && !in_array(strtoupper($value_value), Database::$comparisons)
+                  ) {
+                    $error = true;
+                  }
+                }
               }
             }
           } else {

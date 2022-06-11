@@ -1,11 +1,12 @@
 <?php
 namespace Abstracts;
 
-use \Abstracts\Database;
-use \Abstracts\Validation;
-use \Abstracts\Translation;
-use \Abstracts\Utilities;
-use \Abstracts\Encryption;
+use \Abstracts\Helpers\Database;
+use \Abstracts\Helpers\Validation;
+use \Abstracts\Helpers\Translation;
+use \Abstracts\Helpers\Utilities;
+use \Abstracts\Helpers\Encryption;
+
 use \Abstracts\API;
 use \Abstracts\Device;
 
@@ -18,8 +19,27 @@ class User {
   private $public_functions = array(
 		"verify"
 	);
+  private $allowed_keys = array(
+    "id",
+    "username",
+    "password",
+    "email",
+    "name",
+    "last_name",
+    "nick_name",
+    "image",
+    "phone",
+    "passcode",
+    "email_verified",
+    "phone_verified",
+    "ndid_verified",
+    "face_verified",
+    "date_created",
+    "activate",
+    "user_id"
+  );
 
-  /* initialization */
+  /* core */
   public $module = null;
   private $config = null;
   private $session = null;
@@ -35,6 +55,7 @@ class User {
   /* services */
   private $api = null;
   private $device = null;
+  private $control = null;
 
   function __construct(
     $config,
@@ -43,6 +64,7 @@ class User {
     $identifier = null
   ) {
 
+    /* initialize: core */
     $this->config = $config;
     $this->session = $session;
     $this->module = Utilities::sync_module($config, $identifier);
@@ -53,20 +75,29 @@ class User {
       $this->module
     );
     
+    /* initialize: helpers */
     $this->database = new Database($this->config, $this->session, $this->controls);
     $this->validation = new Validation($this->config);
     $this->translation = new Translation();
     $this->utilities = new Utilities();
     $this->encryption = new Encryption();
 
-    $this->api = new API($this->config, $this->session, $this->controls);
-    $this->device = new Device($this->config, $this->session, $this->controls);
+    /* initialize: services */
+    $this->api = new API($this->config, $this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->device = new Device($this->config, $this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->control = new Control($this->config, $this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
 
     $this->initialize();
 
   }
 
-  function initialize() {
+  private function initialize() {
     if (empty($this->module)) {
       $this->module = $this->database->select(
         "module", 
@@ -75,6 +106,14 @@ class User {
         null, 
         true
       );
+    }
+    if (!empty($this->module) && !count($this->allowed_keys)) {
+      $columns = $this->database->columns($this->module->key);
+      if (count($columns)) {
+        foreach($columns as $column) {
+          $this->allowed_keys = array_merge($this->allowed_keys, $column["COLUMN_NAME"]);
+        }
+      }
     }
   }
 
@@ -167,8 +206,6 @@ class User {
       } else {
         throw new Exception($this->translation->translate("Function not supported"), 421);
       }
-    } else {
-      throw new Exception($this->translation->translate("Permission denied"), 403);
     }
     return $result;
   }
@@ -179,7 +216,7 @@ class User {
       !isset($username) || empty($username)
       || !isset($password) || empty($password)
     ) {
-      foreach($this->utilities->get_headers_all() as $key => $value) {
+      foreach(Utilities::get_headers_all() as $key => $value) {
         if (strtolower($key) == "authorization") {
           if (strpos($value, "Basic") === 0) {
             $authorization = base64_decode(str_replace("Basic ", "", $value));
@@ -224,7 +261,8 @@ class User {
         "*", 
         $filters, 
         $extensions, 
-        true
+        true,
+        $this->allowed_keys
       );
       if (!empty($data)) {
 
@@ -331,13 +369,15 @@ class User {
 
     $result = false;
 
+    $message = $this->translation->translate("Invalid authorization");
+
     if (empty($authorization)) {
       if (isset($_POST["authorization"]) && !empty($_POST["authorization"])) {
         $authorization = $_POST["authorization"];
       } else if (isset($_GET["authorization"]) && !empty($_GET["authorization"])) {
         $authorization = $_GET["authorization"];
       }
-      foreach($this->utilities->get_headers_all() as $key => $value) {
+      foreach(Utilities::get_headers_all() as $key => $value) {
         if (strtolower($key) == "authorization") {
           $authorization= $value;
         }
@@ -348,36 +388,52 @@ class User {
       $session_id = null;
       $user_id = null;
       if (strpos($authorization, "Bearer") === 0) {
-        $token = str_replace("Bearer ", "", $authorization);
         if (isset($config["encrypt_authorization"]) && !empty($config["encrypt_authorization"])) {
-          $decoded = $this->encryption->decode(
-            $token, 
-            $config["encrypt_ssl_public_key"], 
-            $config["encrypt_authorization"]
-          );
-          if ($decoded !== false) {
-            if (
-              isset($decoded->session_id)
-              && isset($decoded->id)
-            ) {
-              $user_id = $decoded->id;
-              $session_id = $decoded->session_id;
+          $token = str_replace("Bearer ", "", $authorization);
+          if (!empty($token)) {
+            $decoded = $this->encryption->decode(
+              $token, 
+              $config["encrypt_ssl_public_key"], 
+              $config["encrypt_authorization"]
+            );
+            if ($decoded !== false) {
+              if (
+                isset($decoded->session_id)
+                && isset($decoded->id)
+              ) {
+                $user_id = $decoded->id;
+                $session_id = $decoded->session_id;
+              }
+            } else {
+              throw new Exception($message, 400);
             }
           }
         } else {
           $token = str_replace("Bearer ", "", $authorization);
-          $session_parts = explode(".", base64_decode($token));
-          if (count($session_parts) == 2) {
-            $user_id = $session_parts[0];
-            $session_id = $session_parts[1];
+          if (!empty($token)) {
+            $session_parts = explode(".", base64_decode($token));
+            if (count($session_parts) == 2) {
+              $user_id = $session_parts[0];
+              $session_id = $session_parts[1];
+            } else {
+              throw new Exception($message, 400);
+            }
+          } else {
+            throw new Exception($message, 400);
           }
         }
       } else if (strpos($authorization, "Basic") === 0) {
         $token = str_replace("Basic ", "", $authorization);
-        $session_parts = explode(".", base64_decode($token));
-        if (count($session_parts) == 2) {
-          $user_id = $session_parts[0];
-          $session_id = $session_parts[1];
+        if (!empty($token)) {
+          $session_parts = explode(".", base64_decode($token));
+          if (count($session_parts) == 2) {
+            $user_id = $session_parts[0];
+            $session_id = $session_parts[1];
+          } else {
+            throw new Exception($message, 400);
+          }
+        } else {
+          throw new Exception($message, 400);
         }
       }
       if (
@@ -398,6 +454,8 @@ class User {
         ) {
           $result = true;
         }
+      } else {
+        throw new Exception($message, 400);
       }
     }
 
@@ -405,9 +463,11 @@ class User {
 
   }
 
-  function authenticate($authorization = null) {
+  function authenticate($authorization = null, $throw_error = true) {
 
     $session = null;
+
+    $message = $this->translation->translate("Invalid authorization");
 
     if (empty($authorization)) {
       if (isset($_POST["authorization"]) && !empty($_POST["authorization"])) {
@@ -415,7 +475,7 @@ class User {
       } else if (isset($_GET["authorization"]) && !empty($_GET["authorization"])) {
         $authorization = $_GET["authorization"];
       }
-      foreach($this->utilities->get_headers_all() as $key => $value) {
+      foreach(Utilities::get_headers_all() as $key => $value) {
         if (strtolower($key) == "authorization") {
           $authorization= $value;
         }
@@ -426,36 +486,66 @@ class User {
       $session_id = null;
       $user_id = null;
       if (strpos($authorization, "Bearer") === 0) {
-        $token = str_replace("Bearer ", "", $authorization);
         if (isset($config["encrypt_authorization"]) && !empty($config["encrypt_authorization"])) {
-          $decoded = $this->encryption->decode(
-            $token, 
-            $config["encrypt_ssl_public_key"], 
-            $config["encrypt_authorization"]
-          );
-          if ($decoded !== false) {
-            if (
-              isset($decoded->session_id)
-              && isset($decoded->id)
-            ) {
-              $user_id = $decoded->id;
-              $session_id = $decoded->session_id;
+          $token = str_replace("Bearer ", "", $authorization);
+          if (!empty($token)) {
+            $decoded = $this->encryption->decode(
+              $token, 
+              $config["encrypt_ssl_public_key"], 
+              $config["encrypt_authorization"]
+            );
+            if ($decoded !== false) {
+              if (
+                isset($decoded->session_id)
+                && isset($decoded->id)
+              ) {
+                $user_id = $decoded->id;
+                $session_id = $decoded->session_id;
+              }
+            } else {
+              if ($throw_error) {
+                throw new Exception($message, 400);
+              }
+            }
+          } else {
+            if ($throw_error) {
+              throw new Exception($message, 400);
             }
           }
         } else {
           $token = str_replace("Bearer ", "", $authorization);
-          $session_parts = explode(".", base64_decode($token));
-          if (count($session_parts) == 2) {
-            $user_id = $session_parts[0];
-            $session_id = $session_parts[1];
+          if (!empty($token)) {
+            $session_parts = explode(".", base64_decode($token));
+            if (count($session_parts) == 2) {
+              $user_id = $session_parts[0];
+              $session_id = $session_parts[1];
+            } else {
+              if ($throw_error) {
+                throw new Exception($message, 400);
+              }
+            }
+          } else {
+            if ($throw_error) {
+              throw new Exception($message, 400);
+            }
           }
         }
       } else if (strpos($authorization, "Basic") === 0) {
         $token = str_replace("Basic ", "", $authorization);
         $session_parts = explode(".", base64_decode($token));
-        if (count($session_parts) == 2) {
-          $user_id = $session_parts[0];
-          $session_id = $session_parts[1];
+        if (!empty($token)) {
+          if (count($session_parts) == 2) {
+            $user_id = $session_parts[0];
+            $session_id = $session_parts[1];
+          } else {
+            if ($throw_error) {
+              throw new Exception($message, 400);
+            }
+          }
+        } else {
+          if ($throw_error) {
+            throw new Exception($message, 400);
+          }
         }
       }
       if (
@@ -467,7 +557,8 @@ class User {
           "*", 
           array("id" => $user_id), 
           null, 
-          true
+          true,
+          $this->allowed_keys
         );
         if (!empty($data)) {
           if ($this->update_device($data->id, $session_id)) {
@@ -475,9 +566,15 @@ class User {
             $session = $this->format($data);
           }
         }
+      } else {
+        if ($throw_error) {
+          throw new Exception($message, 400);
+        }
       }
     } else {
-      return null;
+      if ($throw_error) {
+        throw new Exception($message, 400);
+      }
     }
 
     return $session;
@@ -508,75 +605,98 @@ class User {
       if (
         $data = $this->database->insert(
           "user", 
-          $this->purify($parameters), 
-          true
+          $parameters, 
+          true,
+          $this->allowed_keys
         )
       ) {
-        if (isset($this->config["signup_default_group"]) && !empty($this->config["signup_default_group"])) {
-          $group_data = $this->database->select(
-            "group", 
-            array("id", "controls"), 
-            array("id" => $this->config["signup_default_group"]), 
-            null, 
-            true
-          );
-          if (!empty($group_data)) {
-            $member_parameters = array(
-              "id" => null,
-              "user" => $data->id,
-              "group_id" => $group_data->id,
-              "date_created" => $parameters["date_created"],
-              "activate" => true,
-              "user_id" => $data->id
+        if (
+          $data_update = $this->database->update(
+            "user",
+            array("user_id" => $data->id),
+            array("id" => $data->id),
+            null,
+            true,
+            $this->allowed_keys
+          )
+        ) {
+          $data = $data_update[0];
+          if (isset($this->config["signup_default_group"]) && !empty($this->config["signup_default_group"])) {
+            $group_data = $this->database->select(
+              "group", 
+              array("id", "controls"), 
+              array("id" => $this->config["signup_default_group"]), 
+              null, 
+              true
             );
-            if (
-              $this->database->insert(
-                "member", 
-                $member_parameters, 
-                true
-              )
-            ) {
-              $controls = unserialize($group_data->controls);
-							if (is_array($controls) && count($controls)) {
-                $controls_parameters = array();
-                foreach($controls as $value) {
-                  array_push($controls_parameters, array(
-                    "id" => null,
-                    "user" => $data->id,
-                    "rules" => $value["rules"],
-                    "behaviors" => $value["behaviors"],
-                    "date_created" => $parameters["date_created"],
-                    "activate" => true,
-                    "module_id" => $value["module_id"],
-                    "group_id" => $group_data->id,
-                    "user_id" => $data->id
-                  ));
-                }
-                if (
-                  $this->database->insert_multiple(
-                    "control", 
-                    $controls_parameters, 
-                    true
-                  )
-                ) {
-                  return $this->callback(__METHOD__, func_get_args(), $data);
+            if (!empty($group_data)) {
+              $member_parameters = array(
+                "id" => null,
+                "user" => $data->id,
+                "group_id" => $group_data->id,
+                "date_created" => $parameters["date_created"],
+                "activate" => true,
+                "user_id" => $data->id
+              );
+              if (
+                $this->database->insert(
+                  "member", 
+                  $member_parameters, 
+                  true
+                )
+              ) {
+                $controls = unserialize($group_data->controls);
+                if (is_array($controls) && count($controls)) {
+                  $controls_parameters = array();
+                  foreach($controls as $value) {
+                    array_push($controls_parameters, array(
+                      "id" => null,
+                      "user" => $data->id,
+                      "rules" => $value["rules"],
+                      "behaviors" => $value["behaviors"],
+                      "date_created" => $parameters["date_created"],
+                      "activate" => true,
+                      "module_id" => $value["module_id"],
+                      "group_id" => $group_data->id,
+                      "user_id" => $data->id
+                    ));
+                  }
+                  if (
+                    $this->database->insert_multiple(
+                      "control", 
+                      $controls_parameters, 
+                      true
+                    )
+                  ) {
+                    return $this->callback(__METHOD__, func_get_args(), $data);
+                  } else {
+                    $this->database->delete(
+                      "user", 
+                      array("id" => $data->id), 
+                      null, 
+                      true,
+                      $this->allowed_keys
+                    );
+                    $this->database->delete(
+                      "member", 
+                      array("user" => $data->id), 
+                      null, 
+                      true
+                    );
+                    return false;
+                  }
                 } else {
-                  $this->database->delete(
-                    "user", 
-                    array("id" => $data->id), 
-                    null, 
-                    true
-                  );
-                  $this->database->delete(
-                    "member", 
-                    array("user" => $data->id), 
-                    null, 
-                    true
-                  );
-                  return false;
+                  return $this->callback(__METHOD__, func_get_args(), $data);
                 }
               } else {
-                return $this->callback(__METHOD__, func_get_args(), $data);
+                $this->database->delete(
+                  "user", 
+                  array("id" => $data->id), 
+                  null, 
+                  true,
+                  $this->allowed_keys
+                );
+                return false;
               }
             } else {
               $this->database->delete(
@@ -588,16 +708,16 @@ class User {
               return false;
             }
           } else {
-            $this->database->delete(
-              "user", 
-              array("id" => $data->id), 
-              null, 
-              true
-            );
-            return false;
+            return $this->callback(__METHOD__, func_get_args(), $data);
           }
         } else {
-          return $this->callback(__METHOD__, func_get_args(), $data);
+          $this->database->delete(
+            "user", 
+            array("id" => $data->id), 
+            null, 
+            true
+          );
+          return false;
         }
       } else {
         return false;
@@ -610,6 +730,9 @@ class User {
 
   function get($id, $activate = null) {
     if ($this->validation->require($id, "ID")) {
+
+      $activate = !empty($activate) ? $activate : null;
+
       $filters = array("id" => $id);
       if ($activate) {
         $filters["activate"] = "1";
@@ -619,7 +742,8 @@ class User {
         "*", 
         $filters, 
         null, 
-        true
+        true,
+        $this->allowed_keys
       );
       if (!empty($data)) {
         return $this->callback(__METHOD__, func_get_args(), $this->format($data));
@@ -627,22 +751,32 @@ class User {
         throw new Exception($this->translation->translate("Not found"), 404);
         return null;
       }
+
     } else {
       return null;
     }
   }
 
   function list(
-    $start = 0, 
-    $limit = "", 
+    $start = null, 
+    $limit = null, 
     $sort_by = "id", 
     $sort_direction = "desc", 
-    $activate = false, 
+    $activate = null, 
     $filters = array(), 
     $extensions = array(),
     $key = null, 
     $value = null
   ) {
+
+    $start = !empty($start) ? $start : null;
+    $limit = !empty($limit) ? $limit : null;
+    $sort_by = !empty($sort_by) ? $sort_by : "id";
+    $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
+    $activate = !empty($activate) ? $activate : null;
+    $filters = is_array($filters) ? $filters : array();
+    $extensions = is_array($extensions) ? $extensions : array();
+    
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
@@ -651,7 +785,7 @@ class User {
         array_push($filters, array("activate" => true));
       }
       if (!empty($key) && !empty($value)) {
-        array_push($filters, array($key => $value));
+        $filters[$key] = $value;
       }
       $list = $this->database->select_multiple(
         "user", 
@@ -662,7 +796,8 @@ class User {
         $limit, 
         $sort_by, 
         $sort_direction, 
-        $this->controls["view"]
+        $this->controls["view"],
+        $this->allowed_keys
       );
       if (!empty($list)) {
         $data = array();
@@ -679,12 +814,19 @@ class User {
   }
 
   function count(
-    $start = 0, 
-    $limit = "", 
-    $activate = false, 
+    $start = null, 
+    $limit = null, 
+    $activate = null, 
     $filters = array(), 
     $extensions = array()
   ) {
+
+    $start = !empty($start) ? $start : null;
+    $limit = !empty($limit) ? $limit : null;
+    $activate = !empty($activate) ? $activate : null;
+    $filters = is_array($filters) ? $filters : array();
+    $extensions = is_array($extensions) ? $extensions : array();
+
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
@@ -693,13 +835,18 @@ class User {
         array_push($filters, array("activate" => true));
       }
       if (!empty($key) && !empty($value)) {
-        array_push($filters, array($key => $value));
+        $filters[$key] = $value;
       }
       if (
         $data = $this->database->count(
           "user", 
           "*", 
-          $filters, $start, $extensions, $limit, $this->controls["view"]
+          $filters, 
+          $start, 
+          $extensions, 
+          $limit, 
+          $this->controls["view"],
+          $this->allowed_keys
         )
       ) {
         return $data;
@@ -735,8 +882,9 @@ class User {
         $this->format(
           $this->database->insert(
             "user", 
-            $this->purify($parameters), 
-            $this->controls["create"]
+            $parameters, 
+            $this->controls["create"],
+            $this->allowed_keys
           )
         )
       );
@@ -759,10 +907,11 @@ class User {
         $this->format(
           $this->database->update(
             "user", 
-            $this->purify($parameters), 
+            $parameters, 
             array("id" => $id), 
             null, 
-            $this->controls["update"]
+            $this->controls["update"],
+            $this->allowed_keys
           )
         )
       );
@@ -786,10 +935,11 @@ class User {
           $this->format(
             $this->database->update(
               "user", 
-              $this->purify($parameters), 
+              $parameters, 
               array("id" => $id), 
               null, 
-              $this->controls["update"]
+              $this->controls["update"],
+              $this->allowed_keys
             )
           )
         );
@@ -811,7 +961,8 @@ class User {
             "user", 
             array("id" => $id), 
             null, 
-            $this->controls["delete"]
+            $this->controls["delete"],
+            $this->allowed_keys
           )
         )
       ) {
@@ -915,34 +1066,19 @@ class User {
         $data->image_path->large = Utilities::get_large($data->image_path->original);
       }
   
-      $format_controls = function($controls = array()) {
+      $arrange_controls = function($controls = array()) {
         $data = array();
         if (!empty($controls) && is_array($controls)) {
           foreach($controls as $value) {
             $value = (array) $value;
-            $control = array(
-              "view" => false,
-              "create" => false,
-              "update" => false,
-              "delete" => false,
-            );
-            if ($value["behaviors"] && !empty($value["behaviors"])) {
-              $behaviors = explode(",", $value["behaviors"]);
-              for ($i = 0; $i < count($behaviors); $i++) {
-                if ($control[$behaviors[$i]] !== true) {
-                  if (empty($value["rules"])) {
-                    $control[$behaviors[$i]] = true;
-                  } else {
-                    if (!is_array($control[$behaviors[$i]])) {
-                      $control[$behaviors[$i]] = array();
-                    } else {
-                    }
-                    $control[$behaviors[$i]] = explode(",", $value["rules"]);
-                  }
-                }
-              }
+            if (isset($data[$value["module_id"]])) {
+              $data[$value["module_id"]] = array_merge(
+                $data[$value["module_id"]],
+                $this->control->arrange((object) $value)
+              );
+            } else {
+              $data[$value["module_id"]] = $this->control->arrange((object) $value);
             }
-            $data[$value["module_id"]] = $control;
           }
         }
         return $data;
@@ -971,7 +1107,7 @@ class User {
             );
             if (!empty($group_data)) {
               if (isset($group_data->controls) && !empty($group_data->controls)) {
-                $group_data->controls = $format_controls(unserialize($group_data->controls));
+                $group_data->controls = $arrange_controls(unserialize($group_data->controls));
                 $member_data[$i]->group_id_data = $group_data;
               }
             }
@@ -992,7 +1128,7 @@ class User {
           true
         );
         if (!empty($control_data)) {
-          $controls = $format_controls($control_data);
+          $controls = $arrange_controls($control_data);
         }
         if ($data->members) {
           for ($i = 0; $i < count($member_data); $i++) {
@@ -1020,7 +1156,7 @@ class User {
           $filters = array("id" => $id);
           $data_override = $this->database->select(
             ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-            "`" . $key . "`", 
+            array("`" . $key . "`"), 
             $filters, 
             null, 
             true
@@ -1185,34 +1321,6 @@ class User {
     } else {
       return $this->random_username();
     }
-  }
-
-  function purify($parameters) {
-    $allowed_keys = array(
-      "id",
-      "username",
-      "password",
-      "email",
-      "name",
-      "last_name",
-      "nick_name",
-      "image",
-      "phone",
-      "passcode",
-      "email_verified",
-      "phone_verified",
-      "ndid_verified",
-      "face_verified",
-      "date_created",
-      "activate",
-      "user_id"
-    );
-    foreach($parameters as $key => $parameter) {
-      if (!in_array($key, $allowed_keys)) {
-        unset($parameters[$key]);
-      }
-    }
-    return $parameters;
   }
 
   function callback($function, $arguments, $result) {

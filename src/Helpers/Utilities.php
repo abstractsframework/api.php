@@ -1,27 +1,43 @@
 <?php
-namespace Abstracts;
+namespace Abstracts\Helpers;
 
-use \Abstracts\Database;
+use \Abstracts\Helpers\Database;
+use \Abstracts\Helpers\Translation;
+
+use Exception;
 
 class Utilities {
 
-  function get_headers_all() {
-    $headers = array();
-    if (function_exists("getallheaders")) {
-      $headers = getallheaders();
-    } else if (function_exists("apache_request_headers")) {
-      $headers = apache_request_headers();
-    } else {
-      foreach($_SERVER as $name => $value) {
-        if (substr($name, 0, 5) == 'HTTP_') {
-          $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
-        }
+  function generate_link($text) {
+	
+    $text = strip_tags($text);
+    // Preserve escaped octets.
+    $text = preg_replace('|%([a-fA-F0-9][a-fA-F0-9])|', '---$1---', $text);
+    // Remove percent signs that are not part of an octet.
+    $text = str_replace('%', '', $text);
+    // Restore octets.
+    $text = preg_replace('|---([a-fA-F0-9][a-fA-F0-9])---|', '%$1', $text);
+  
+    if ($this->is_utf8($text)) {
+      if (function_exists('mb_strtolower')) {
+        $text = mb_strtolower($text, 'UTF-8');
       }
+      $text = $this->utf8_url_encode($text, 1000);
     }
-    return $headers;
+  
+    $text = strtolower($text);
+    $text = preg_replace('/&.+?;/', '', $text); // kill entities
+    $text = str_replace('.', '-', $text);
+    $text = preg_replace('/[^%a-z0-9 _-]/', '', $text);
+    $text = preg_replace('/\s+/', '-', $text);
+    $text = preg_replace('|-+|', '-', $text);
+    $text = trim($text, '-');
+  
+    return urldecode($text);
+    
   }
 
-  function format_request() {
+  public static function format_request() {
 
     $arrange = function($value) {
       $parameters = null;
@@ -95,77 +111,49 @@ class Utilities {
 
   }
 
-  function generate_link($text) {
-	
-    $text = strip_tags($text);
-    // Preserve escaped octets.
-    $text = preg_replace('|%([a-fA-F0-9][a-fA-F0-9])|', '---$1---', $text);
-    // Remove percent signs that are not part of an octet.
-    $text = str_replace('%', '', $text);
-    // Restore octets.
-    $text = preg_replace('|---([a-fA-F0-9][a-fA-F0-9])---|', '%$1', $text);
-  
-    if ($this->is_utf8($text)) {
-      if (function_exists('mb_strtolower')) {
-        $text = mb_strtolower($text, 'UTF-8');
+  public static function get_headers_all() {
+    $headers = array();
+    if (function_exists("getallheaders")) {
+      $headers = getallheaders();
+    } else if (function_exists("apache_request_headers")) {
+      $headers = apache_request_headers();
+    } else {
+      foreach($_SERVER as $name => $value) {
+        if (substr($name, 0, 5) == 'HTTP_') {
+          $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
+        }
       }
-      $text = $this->utf8_url_encode($text, 1000);
     }
-  
-    $text = strtolower($text);
-    $text = preg_replace('/&.+?;/', '', $text); // kill entities
-    $text = str_replace('.', '-', $text);
-    $text = preg_replace('/[^%a-z0-9 _-]/', '', $text);
-    $text = preg_replace('/\s+/', '-', $text);
-    $text = preg_replace('|-+|', '-', $text);
-    $text = trim($text, '-');
-  
-    return urldecode($text);
-    
+    return $headers;
   }
 
-  function utf8_url_encode( $utf8_string, $length = 0 ) {
-
-    $unicode = '';
-    $values = array();
-    $num_octets = 1;
-    $unicode_length = 0;
-  
-    $string_length = strlen( $utf8_string );
-    for ($i = 0; $i < $string_length; $i++ ) {
-  
-      $value = ord( $utf8_string[ $i ] );
-  
-      if ( $value < 128 ) {
-        if ( $length && ( $unicode_length >= $length ) )
-          break;
-        $unicode .= chr($value);
-        $unicode_length++;
-      } else {
-          if ( count( $values ) == 0 ) $num_octets = ( $value < 224 ) ? 2 : 3;
-  
-          $values[] = $value;
-  
-          if ( $length && ( $unicode_length + ($num_octets * 3) ) > $length )
-              break;
-          if ( count( $values ) == $num_octets ) {
-              if ($num_octets == 3) {
-                  $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]) . '%' . dechex($values[2]);
-                  $unicode_length += 9;
-              } else {
-                  $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]);
-                  $unicode_length += 6;
-              }
-  
-              $values = array();
-              $num_octets = 1;
-          }
-      }
-  
+  public static function length($string) {
+    if (function_exists("mb_strlen")) {
+      return mb_strlen($string);
+    } else {
+      return strlen($string);
     }
-  
-    return $unicode;
-  
+  }
+
+  public static function handle_response($result) {
+    $translation = new Translation();
+    if (is_null($result) || $result == false) {
+      throw new Exception($translation->translate("Unknown errors"), 400);
+    }
+    if (is_null($result) || is_bool($result)) {
+      return json_encode(array("result" => $result));
+    } else {
+      return json_encode($result);
+    }
+  }
+
+  public static function override_controls($view = false, $create = false, $update = false, $delete = false) {
+    return array(
+      "view" => $view,
+      "create" => $create,
+      "update" => $update,
+      "delete" => $delete
+    );
   }
 
   public static function get_class_name($key) {
@@ -241,25 +229,6 @@ class Utilities {
       }
     }
     return $controls;
-  }
-
-  function is_utf8($str) {
-    $length = strlen($str);
-    for ($i=0; $i < $length; $i++) {
-        $c = ord($str[$i]);
-        if ($c < 0x80) $n = 0; # 0bbbbbbb
-        elseif (($c & 0xE0) == 0xC0) $n=1; # 110bbbbb
-        elseif (($c & 0xF0) == 0xE0) $n=2; # 1110bbbb
-        elseif (($c & 0xF8) == 0xF0) $n=3; # 11110bbb
-        elseif (($c & 0xFC) == 0xF8) $n=4; # 111110bb
-        elseif (($c & 0xFE) == 0xFC) $n=5; # 1111110b
-        else return false; # Does not match any model
-        for ($j=0; $j<$n; $j++) { # n bytes matching 10bbbbbb follow ?
-            if ((++$i == $length) || ((ord($str[$i]) & 0xC0) != 0x80))
-                return false;
-        }
-    }
-    return true;
   }
   
   public static function generate_thumbnail($source, $destination, $target_width, $target_height = null, $aspectratio = true, $quality = 100) {
@@ -425,6 +394,73 @@ class Utilities {
     $file_path = basename($path);
     $directory_path = str_replace($file_path, "", $path);
     return $directory_path . "large/" . $file_path;
+  }
+
+  public static function is_utf8($str) {
+    $length = strlen($str);
+    for ($i=0; $i < $length; $i++) {
+        $c = ord($str[$i]);
+        if ($c < 0x80) $n = 0; # 0bbbbbbb
+        elseif (($c & 0xE0) == 0xC0) $n=1; # 110bbbbb
+        elseif (($c & 0xF0) == 0xE0) $n=2; # 1110bbbb
+        elseif (($c & 0xF8) == 0xF0) $n=3; # 11110bbb
+        elseif (($c & 0xFC) == 0xF8) $n=4; # 111110bb
+        elseif (($c & 0xFE) == 0xFC) $n=5; # 1111110b
+        else return false; # Does not match any model
+        for ($j=0; $j<$n; $j++) { # n bytes matching 10bbbbbb follow ?
+            if ((++$i == $length) || ((ord($str[$i]) & 0xC0) != 0x80))
+                return false;
+        }
+    }
+    return true;
+  }
+
+  public static function utf8_url_encode($utf8_string, $length = 0 ) {
+
+    $unicode = '';
+    $values = array();
+    $num_octets = 1;
+    $unicode_length = 0;
+  
+    $string_length = strlen( $utf8_string );
+    for ($i = 0; $i < $string_length; $i++ ) {
+  
+      $value = ord( $utf8_string[ $i ] );
+  
+      if ( $value < 128 ) {
+        if ( $length && ( $unicode_length >= $length ) )
+          break;
+        $unicode .= chr($value);
+        $unicode_length++;
+      } else {
+          if ( count( $values ) == 0 ) $num_octets = ( $value < 224 ) ? 2 : 3;
+  
+          $values[] = $value;
+  
+          if ( $length && ( $unicode_length + ($num_octets * 3) ) > $length )
+              break;
+          if ( count( $values ) == $num_octets ) {
+              if ($num_octets == 3) {
+                  $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]) . '%' . dechex($values[2]);
+                  $unicode_length += 9;
+              } else {
+                  $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]);
+                  $unicode_length += 6;
+              }
+  
+              $values = array();
+              $num_octets = 1;
+          }
+      }
+  
+    }
+  
+    return $unicode;
+  
+  }
+
+  public static function is_base64($string) {
+    return (bool) preg_match('/^[a-zA-Z0-9\/\r\n+]*={0,2}$/', $string);
   }
 
 }

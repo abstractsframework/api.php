@@ -1,10 +1,11 @@
 <?php
 namespace Abstracts;
 
-use \Abstracts\Database;
-use \Abstracts\Validation;
-use \Abstracts\Translation;
-use \Abstracts\Utilities;
+use \Abstracts\Helpers\Database;
+use \Abstracts\Helpers\Validation;
+use \Abstracts\Helpers\Translation;
+use \Abstracts\Helpers\Utilities;
+
 use \Abstracts\Abstracts;
 use \Abstracts\API;
 use \Abstracts\User;
@@ -18,21 +19,33 @@ class Built {
   private $public_functions = array(
 	);
 
-  /* initialization */
+  /* core */
   public $module = null;
   private $class = null;
   private $config = null;
   private $session = null;
   private $controls = null;
   private $identifier = null;
-  private $abstracts = null;
+  public $abstracts = null;
+  public $allowed_keys = array();
+
+  /* helpers */
+  private $database = null;
+  private $validation = null;
+  private $translation = null;
+  private $utilities = null;
+
+  /* services */
+  private $api = null;
+
+  /* instances */
   private $file_types = array(
     "input-file",
     "input-file-multiple",
     "input-file-multiple-drop",
     "image-upload"
   );
-  private $serialize_types = array(
+  private $multiple_types = array(
     "select-multiple",
     "select-multiple-select2",
     "input-file-multiple",
@@ -44,15 +57,6 @@ class Built {
     "checkbox-inline"
   );
 
-  /* helpers */
-  private $database = null;
-  private $validation = null;
-  private $translation = null;
-  private $utilities = null;
-
-  /* services */
-  private $api = null;
-
   function __construct(
     $config,
     $session = null,
@@ -60,6 +64,7 @@ class Built {
     $identifier = null
   ) {
 
+    /* initialize: core */
     $this->config = $config;
     $this->session = $session;
     $this->identifier = $identifier;
@@ -73,31 +78,34 @@ class Built {
       $this->module
     );
     
+    /* initialize: helpers */
     $this->database = new Database($this->config, $this->session, $this->controls);
     $this->validation = new Validation($this->config);
     $this->translation = new Translation();
     $this->utilities = new Utilities();
 
-    $this->api = new API($this->config, $this->session, $this->controls);
-    
+    /* initialize: services */
+    $this->api = new API($this->config, $this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
     $this->abstracts = $this->initialize($this->id);
     
   }
 
-  function initialize($id) {
+  function initialize($module_id) {
     $abstracts_data = null;
-    if (!empty($id)) {
+    if (!empty($module_id)) {
       $abstracts = new Abstracts(
         $this->config, 
         $this->session, 
-        array(
-          "view" => true,
-          "create" => false,
-          "update" => false,
-          "delete" => false
-        )
+        Utilities::override_controls(true)
       );
-      $abstracts_data = $abstracts->get($id);
+      try {
+        $abstracts_data = $abstracts->get($module_id);
+      } catch (Exception $e) {
+        $abstracts_data = $this->simulate($module_id, $this->module);
+      }
+      $this->allowed_keys = $this->keys($module_id, $this->module, $abstracts_data);
     }
     return $abstracts_data;
   }
@@ -183,14 +191,15 @@ class Built {
       } else {
         throw new Exception($this->translation->translate("Module not found"), 500);
       }
-    } else {
-      throw new Exception($this->translation->translate("Permission denied"), 403);
     }
     return $result;
   }
 
   function get($id, $activate = null) {
     if ($this->validation->require($id, "ID")) {
+
+      $activate = !empty($activate) ? $activate : null;
+
       $filters = array("id" => $id);
       if ($activate) {
         $filters["activate"] = "1";
@@ -200,7 +209,8 @@ class Built {
         "*", 
         $filters, 
         null, 
-        true
+        true,
+        $this->allowed_keys
       );
       if (!empty($data)) {
         return $this->callback(__METHOD__, func_get_args(), $this->format($data));
@@ -208,31 +218,42 @@ class Built {
         throw new Exception($this->translation->translate("Not found"), 404);
         return null;
       }
+
     } else {
       return null;
     }
   }
 
   function list(
-    $start = 0, 
-    $limit = "", 
+    $start = null, 
+    $limit = null, 
     $sort_by = "id", 
     $sort_direction = "desc", 
-    $activate = false, 
+    $activate = null, 
     $filters = array(), 
     $extensions = array(),
     $key = null, 
     $value = null
   ) {
+
+    $start = !empty($start) ? $start : null;
+    $limit = !empty($limit) ? $limit : null;
+    $sort_by = !empty($sort_by) ? $sort_by : "id";
+    $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
+    $activate = !empty($activate) ? $activate : null;
+    $filters = is_array($filters) ? $filters : array();
+    $extensions = is_array($extensions) ? $extensions : array();
+
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
+      
       if (!empty($activate)) {
         array_push($filters, array("activate" => true));
       }
       if (!empty($key) && !empty($value)) {
-        array_push($filters, array($key => $value));
+        $filters[$key] = $value;
       }
       $list = $this->database->select_multiple(
         ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
@@ -243,7 +264,8 @@ class Built {
         $limit, 
         $sort_by, 
         $sort_direction, 
-        $this->controls["view"]
+        $this->controls["view"],
+        $this->allowed_keys
       );
       if (!empty($list)) {
         $data = array();
@@ -260,12 +282,19 @@ class Built {
   }
 
   function count(
-    $start = 0, 
-    $limit = "", 
-    $activate = false, 
+    $start = null, 
+    $limit = null, 
+    $activate = null, 
     $filters = array(), 
     $extensions = array()
   ) {
+
+    $start = !empty($start) ? $start : null;
+    $limit = !empty($limit) ? $limit : null;
+    $activate = !empty($activate) ? $activate : null;
+    $filters = is_array($filters) ? $filters : array();
+    $extensions = is_array($extensions) ? $extensions : array();
+
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
@@ -274,7 +303,7 @@ class Built {
         array_push($filters, array("activate" => true));
       }
       if (!empty($key) && !empty($value)) {
-        array_push($filters, array($key => $value));
+        $filters[$key] = $value;
       }
       if (
         $data = $this->database->count(
@@ -284,7 +313,8 @@ class Built {
           $start, 
           $extensions, 
           $limit, 
-          $this->controls["view"]
+          $this->controls["view"],
+          $this->allowed_keys
         )
       ) {
         return $data;
@@ -312,8 +342,9 @@ class Built {
         $this->format(
           $this->database->insert(
             ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-            $this->purify($parameters), 
-            $this->controls["create"]
+            $parameters, 
+            $this->controls["create"],
+            $this->allowed_keys
           )
         )
       );
@@ -337,10 +368,11 @@ class Built {
           $this->format(
             $this->database->update(
               ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-              $this->purify($parameters), 
+              $parameters, 
               array("id" => $id), 
               null, 
-              $this->controls["update"]
+              $this->controls["update"],
+              $this->allowed_keys
             )
           )
         );
@@ -368,10 +400,11 @@ class Built {
           $this->format(
             $this->database->update(
               ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-              $this->purify($parameters), 
+              $parameters, 
               array("id" => $id), 
               null, 
-              $this->controls["update"]
+              $this->controls["update"],
+              $this->allowed_keys
             )
           )
         );
@@ -393,7 +426,8 @@ class Built {
             ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
             array("id" => $id), 
             null, 
-            $this->controls["delete"]
+            $this->controls["delete"],
+            $this->allowed_keys
           )
         )
       ) {
@@ -451,7 +485,8 @@ class Built {
           "*", 
           array("id" => $id), 
           null, 
-          true
+          true,
+          $this->allowed_keys
         )
       )) {
         
@@ -465,7 +500,7 @@ class Built {
           $error, 
           $size
         ) {
-
+          
           $image_options = array();
           $image_options["quality"] = 75;
           if (!empty($this->module)) {
@@ -608,10 +643,11 @@ class Built {
               if (
                 $this->database->update(
                   ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-                  $this->purify($parameters), 
+                  $parameters, 
                   array("id" => $data_target->id), 
                   null, 
-                  $this->controls["update"]
+                  $this->controls["update"],
+                  $this->allowed_keys
                 )
               ) {
                 if ($reference->type == "image-upload" || $reference->file_type == "image") {
@@ -728,11 +764,17 @@ class Built {
             }
           }
         }
-
-        if (empty(count($errors))) {
-          return $this->callback(__METHOD__, func_get_args(), $success);
+        
+        if (empty(count($errors)) || empty($success)) {
+          if (!empty($success)) {
+            return $this->callback(__METHOD__, func_get_args(), $success);
+          } else {
+            throw new Exception($this->translation->translate("No file has been uploaded"), 409);
+            return null;
+          }
         } else {
-          throw new Exception($this->translation->translate("Unable to upload") . " '" . implode("', '", $reference->key) . "'", 409);
+          throw new Exception($this->translation->translate("Unable to upload") . " '" . implode("', '", $errors) . "'", 409);
+          return null;
         }
 
       } else {
@@ -754,7 +796,8 @@ class Built {
             "*", 
             array("id" => $id), 
             null, 
-            true
+            true,
+            $this->allowed_keys
           )
         )) {
 
@@ -828,7 +871,8 @@ class Built {
                       $parameters, 
                       array("id" => $data_current->id), 
                       null, 
-                      $this->controls["update"]
+                      $this->controls["update"],
+                      $this->allowed_keys
                     )
                   ) {
                     
@@ -844,14 +888,16 @@ class Built {
             return $this->callback(__METHOD__, func_get_args(), $success);
           } else {
             throw new Exception($this->translation->translate("Unable to delete") . " '" . implode("', '", $reference->key) . "'", 409);
+            return null;
           }
 
         } else {
+          throw new Exception($this->translation->translate("Not found"), 404);
           return null;
         }
 
       } else {
-        throw new Exception($this->translation->translate("File(s) not found"), 400);
+        throw new Exception($this->translation->translate("File(s) not found"), 404);
         return null;
       }
     } else {
@@ -861,14 +907,23 @@ class Built {
 
   function list_option(
     $key, 
-    $start = 0, 
-    $limit = "", 
+    $start = null, 
+    $limit = null, 
     $sort_by = "id", 
     $sort_direction = "desc", 
-    $activate = false, 
+    $activate = null, 
     $filters = array(), 
     $extensions = array()
   ) {
+
+    $start = !empty($start) ? $start : null;
+    $limit = !empty($limit) ? $limit : null;
+    $sort_by = !empty($sort_by) ? $sort_by : "id";
+    $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
+    $activate = !empty($activate) ? $activate : null;
+    $filters = is_array($filters) ? $filters : array();
+    $extensions = is_array($extensions) ? $extensions : array();
+
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
@@ -878,7 +933,7 @@ class Built {
         array_push($filters, array("activate" => true));
       }
       if (!empty($key) && !empty($value)) {
-        array_push($filters, array($key => $value));
+        $filters[$key] = $value;
       }
       $list = $this->database->select_multiple(
         $key, 
@@ -913,7 +968,7 @@ class Built {
             unset($parameters[$reference->key]);
             $parameters[$reference->key] = "";
           } else {
-            if (in_array($reference->type, $this->serialize_types)) {
+            if (in_array($reference->type, $this->multiple_types)) {
               if ($reference->type == "serialize") {
                 $parameters[$reference->key] = serialize($parameters[$reference->key]);
               } else {
@@ -984,7 +1039,7 @@ class Built {
             }
           }
 
-          if (in_array($reference->type, $this->serialize_types)) {
+          if (in_array($reference->type, $this->multiple_types)) {
             if ($reference->type == "serialize") {
               $data->$key = unserialize($data->$key);
             } else {
@@ -1002,7 +1057,7 @@ class Built {
                 "name" => basename($value),
                 "original" => null,
                 "thumbnail" => null,
-                "large" => null,
+                "large" => null
               );
               if ($reference->type == "image-upload" || $reference->file_type == "image") {
                 $path->original = $value;
@@ -1043,7 +1098,7 @@ class Built {
           $filters = array("id" => $id);
           $data_override = $this->database->select(
             ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-            "`" . $key . "`", 
+            array("`" . $key . "`"), 
             $filters, 
             null, 
             true
@@ -1059,7 +1114,7 @@ class Built {
         foreach($this->abstracts->references as $reference) {
           if ($reference->key == $key && $reference->input_option == "dynamic") {
   
-            if (in_array($reference->type, $this->serialize_types)) {
+            if (in_array($reference->type, $this->multiple_types)) {
               if ($reference->type == "serialize") {
                 $data_override->$key = unserialize($data_override->$key);
               } else {
@@ -1074,12 +1129,7 @@ class Built {
                   $abstracts = new Abstracts(
                     $this->config, 
                     $this->session, 
-                    array(
-                      "view" => true,
-                      "create" => false,
-                      "update" => false,
-                      "delete" => false
-                    )
+                    Utilities::override_controls(true)
                   );
                   $key_abstracts = $abstracts->get($reference->input_option_dynamic_value_key);
                   if (!empty($key_abstracts)) {
@@ -1222,17 +1272,169 @@ class Built {
     return $result;
   }
 
-  function purify($parameters) {
+  function keys(
+    $module_id = null, 
+    $override_module = null, 
+    $override_abstracts = null
+  ) {
     $allowed_keys = array();
-    foreach($this->abstracts->references as $reference) {
-      array_push($allowed_keys, $reference->key);
-    }
-    foreach($parameters as $key => $parameter) {
-      if (!in_array($key, $allowed_keys)) {
-        unset($parameters[$key]);
+    $abstracts_data = $override_abstracts;
+    if (empty($override_abstracts)) {
+      $abstracts = new Abstracts(
+        $this->config, 
+        $this->session, 
+        Utilities::override_controls(true)
+      );
+      try {
+        $abstracts_data = $abstracts->get($module_id);
+      } catch (Exception $e) {
+        $abstracts_data = $this->simulate($module_id, $override_module);
       }
     }
-    return $parameters;
+    if (!empty($abstracts_data)) {
+      $default_keys = array(
+        "id",
+        "activate",
+        "date_created"
+      );
+      if ($abstracts_data->data_sortable) {
+        array_push($default_keys, "order");
+      }
+      if ($abstracts_data->component_module) {
+        array_push($default_keys, "module_id");
+        array_push($default_keys, "module_key");
+        array_push($default_keys, "module_target");
+      }
+      if ($abstracts_data->component_group) {
+        array_push($default_keys, "group_id");
+      }
+      if ($abstracts_data->component_user) {
+        array_push($default_keys, "user_id");
+      }
+      if ($abstracts_data->component_language) {
+        array_push($default_keys, "language_id");
+      }
+      if ($abstracts_data->component_page) {
+        array_push($default_keys, "page_id");
+      }
+      if ($abstracts_data->component_media) {
+        array_push($default_keys, "media_id");
+      }
+      if ($abstracts_data->component_commerce) {
+        array_push($default_keys, "price");
+        array_push($default_keys, "currency");
+      }
+      foreach($abstracts_data->references as $reference) {
+        array_push($allowed_keys, $reference->key);
+      }
+      return array_merge($allowed_keys, $default_keys);
+    } else {
+      return $allowed_keys;
+    }
+  }
+
+  function simulate($module_id = null, $override_module = null) {
+    $module_data = $override_module;
+    if (empty($override_module)) {
+      $this->module_data = $this->database->select(
+        "module", 
+        "*", 
+        array("id" => $module_id), 
+        null, 
+        true
+      );
+    }
+    if (!empty($module_data)) {
+      $references = array();
+      $columns = $this->database->columns($module_data->key);
+      $simulate_reference = function($column) {
+        $validate_number = null;
+        $validate_datetime = null;
+        $type = "input-text";
+        if ($column["DATA_TYPE"] == "int") {
+          $type = "input-number";
+          $validate_number = true;
+        } else if ($column["DATA_TYPE"] == "date") {
+          $type = "input-date";
+          $validate_datetime = true;
+        } else if ($column["DATA_TYPE"] == "datetime") {
+          $type = "input-datetime";
+          $validate_datetime = true;
+        } else if ($column["DATA_TYPE"] == "tinyint") {
+          $type = "switch";
+        }
+        $reference_data = (object) array(
+          "name" => str_replace("_", " ", ucwords($column["COLUMN_NAME"])),
+          "key" => $column["COLUMN_NAME"],
+          "type" => $type,
+          "placeholder" => $column["COLUMN_COMMENT"],
+          "help" => "",
+          "validate_number" => $validate_number,
+          "validate_datetime" => $validate_datetime,
+          "validate_string_max" => $column["CHARACTER_MAXIMUM_LENGTH"],
+          "default_value" => $column["COLUMN_DEFAULT"],
+          "order" => $column["ORDINAL_POSITION"]
+        );
+        return $reference_data;
+      };
+      $database_collation = null;
+      $data_sortable = false;
+      $component_module = false;
+      $component_group = false;
+      $component_user = false;
+      $component_language = false;
+      $component_page = false;
+      $component_media = false;
+      $component_commerce = false;
+      if (count($columns)) {
+        foreach($columns as $column) {
+          array_push($references, $simulate_reference($column));
+          if (!is_null($column["COLLATION_NAME"])) {
+            $database_collation = $column["COLLATION_NAME"];
+          } else if ($column["COLUMN_NAME"] == "order") {
+            $data_sortable = true;
+          } else if ($column["COLUMN_NAME"] == "module_id") {
+            $component_module = true;
+          } else if ($column["COLUMN_NAME"] == "group_id") {
+            $component_group = true;
+          } else if ($column["COLUMN_NAME"] == "user_id") {
+            $component_user = true;
+          } else if ($column["COLUMN_NAME"] == "language_id") {
+            $component_language = true;
+          } else if ($column["COLUMN_NAME"] == "page_id") {
+            $component_page = true;
+          } else if ($column["COLUMN_NAME"] == "media_id") {
+            $component_media = true;
+          } else if ($column["COLUMN_NAME"] == "price" && $column["COLUMN_NAME"] == "currency") {
+            $component_commerce = true;
+          }
+        }
+      }
+      $abstracts_data = (object) array(
+        "id" => $module_data->id,
+        "key" => $module_data->key,
+        "description" => $module_data->description,
+        "component_module" => $component_module,
+        "component_group" => $component_group,
+        "component_user" => $component_user,
+        "component_language" => $component_language,
+        "component_page" => $component_page,
+        "component_media" => $component_media,
+        "component_commerce" => $component_commerce,
+        "database_collation" => $database_collation,
+        "data_sortable" => $data_sortable,
+        "template" => $module_data->page_template,
+        "icon" => $module_data->icon,
+        "category" => $module_data->category,
+        "subject" => $module_data->subject,
+        "subject_icon" => $module_data->subject_icon,
+        "order" => $module_data->order,
+        "references" => $references
+      );
+      return $abstracts_data;
+    } else {
+      return null;
+    }
   }
 
   function callback($function, $arguments, $result) {
