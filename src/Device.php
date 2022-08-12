@@ -1,22 +1,24 @@
 <?php
 namespace Abstracts;
 
+use \Abstracts\Helpers\Initialize;
 use \Abstracts\Helpers\Database;
 use \Abstracts\Helpers\Validation;
 use \Abstracts\Helpers\Translation;
 use \Abstracts\Helpers\Utilities;
+
+use \Abstracts\API;
 
 use Exception;
 
 class Device {
 
   /* configuration */
-  private $id = "19";
-  private $public_functions = array();
-  private $allowed_keys = array();
+  public $id = "19";
+  public $public_functions = array();
+  public $module = null;
 
   /* core */
-  public $module = null;
   private $config = null;
   private $session = null;
   private $controls = null;
@@ -25,47 +27,32 @@ class Device {
   private $database = null;
   private $validation = null;
   private $translation = null;
-  private $utilities = null;
+
+  /* services */
+  private $api = null;
 
   function __construct(
-    $config,
     $session = null,
-    $controls = null,
-    $identifier = null
+    $controls = null
   ) {
 
     /* initialize: core */
-    $this->config = $config;
-    $this->session = $session;
-    $this->module = Utilities::sync_module($config, $identifier);
-    $this->controls = Utilities::sync_control(
-      $this->id, 
-      $session, 
-      $controls,
-      $this->module
-    );
+    $initialize = new Initialize($session, $controls, $this->id);
+    $this->config = $initialize->config;
+    $this->session = $initialize->session;
+    $this->controls = $initialize->controls;
+    $this->module = $initialize->module;
     
     /* initialize: helpers */
-    $this->database = new Database($this->config, $this->session, $this->controls);
-    $this->validation = new Validation($this->config);
+    $this->database = new Database($this->session, $this->controls);
+    $this->validation = new Validation();
     $this->translation = new Translation();
-    $this->utilities = new Utilities();
 
-    /* initialize: module */
-    $this->initialize();
+    /* initialize: services */
+    $this->api = new API($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
 
-  }
-
-  private function initialize() {
-    if (empty($this->module)) {
-      $this->module = $this->database->select(
-        "module", 
-        "*", 
-        array("id" => $this->id), 
-        null, 
-        true
-      );
-    }
   }
 
   function get_device($user_agent = null) {
@@ -118,7 +105,7 @@ class Device {
       '/PostmanRuntime/i' => 'PostMan'
     );
 
-    foreach($platform_array as $regex => $value) {
+    foreach ($platform_array as $regex => $value) {
       if (preg_match($regex, $user_agent)) {
         if ($is_native) {
           $platform = $value;
@@ -161,7 +148,7 @@ class Device {
       '/postmanruntime\/([a-zA-Z0-9\.\_\s]+)/i' =>  'PostMan'
     );
 
-    foreach($os_array as $regex => $value) {
+    foreach ($os_array as $regex => $value) {
       if (preg_match($regex, $user_agent)) {
         $os = $value;
         $version = preg_replace($regex, '$1', $user_agent);
@@ -231,7 +218,7 @@ class Device {
       '/mobile/i'    => ""
     );
 
-    foreach($browser_array as $regex => $value) {
+    foreach ($browser_array as $regex => $value) {
       if (preg_match($regex, $user_agent)) {
         $browser = $value;
       }
@@ -262,7 +249,7 @@ class Device {
       '/mobile/i' => true
     );
 
-    foreach($mobile_array as $regex => $value) {
+    foreach ($mobile_array as $regex => $value) {
       if (preg_match($regex, $user_agent)) {
         $is_mobile = $value;
       }

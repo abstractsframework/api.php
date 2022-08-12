@@ -1,0 +1,31 @@
+Options Indexes FollowSymLinks
+
+<IfModule mod_rewrite.c>
+
+	RewriteEngine On
+	
+	RewriteBase {{rewrite_base_url}}
+	
+	RewriteCond %{REQUEST_FILENAME} !-f
+	RewriteCond %{REQUEST_FILENAME} !-d
+
+	RewriteRule ^([A-Za-z0-9\.\_\-]+)\/$ index.php?m=$1 [QSA]
+	RewriteRule ^([A-Za-z0-9\.\_\-]+)\/([A-Za-z\_]+)$ index.php?m=$1&f=$2 [QSA]
+	RewriteRule ^([A-Za-z0-9\.\_\-]+)\/([0-9]+)$ index.php?m=$1&id=$2 [QSA]
+	RewriteRule ^([A-Za-z0-9\.\_\-]+)\/([0-9]+)\/([A-Za-z\_]+)$ index.php?m=$1&f=$3&id=$2 [QSA]
+	RewriteRule ^([A-Za-z0-9\.\_\-]+)\/([0-9]+)\/([A-Za-z\_]+)\/data$ index.php?m=$1&f=data&id=$2&key=$3 [QSA]
+	RewriteRule ^([A-Za-z0-9\.\_\-]+)\/([A-Za-z\_]+)\/list$ index.php?m=$1&f=options&key=$2 [QSA]
+	RewriteRule ^([A-Za-z0-9\.\_\-]+)\/([A-Za-z\_]+)\/([0-9]+)$ index.php?m=$1&f=$2&$2=$3 [QSA]
+	RewriteRule ^([A-Za-z0-9\.\_\-]+)\/([A-Za-z\_]+)\/([A-Za-z\_]+)\/(.*)$ index.php?m=$1&f=$2&key=$3&value=$4 [QSA]
+
+	RewriteCond %{HTTP:Authorization} ^(.*)
+	RewriteRule .* - [e=HTTP_AUTHORIZATION:%1]
+	
+</IfModule>
+
+<IfModule mod_headers.c>
+  Header set Access-Control-Allow-Origin "*"
+	Header set Access-Control-Request-Headers "*"
+	Header set Access-Control-Allow-Methods "GET, POST, PUT, PATCH, COPY, DELETE, OPTIONS"
+	Header set Access-Control-Allow-Headers "Access-Control-Allow-Origin, Access-Control-Allow-Methods, Content-Type, Authorization, Key, Secret, Token, Hash, Language"
+</IfModule>

@@ -1,15 +1,17 @@
 <?php
 namespace Abstracts\Helpers;
 
+use \Abstracts\Helpers\Initialize;
+
 class Security {
 
   /* core */
   private $config = null;
 
-  function __construct($config) {
+  function __construct() {
     
     /* initialize: core */
-    $this->config = $config;
+    $this->config = Initialize::config();
 
   }
 

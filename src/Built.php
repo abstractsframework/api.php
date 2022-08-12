@@ -1,6 +1,7 @@
 <?php
 namespace Abstracts;
 
+use \Abstracts\Helpers\Initialize;
 use \Abstracts\Helpers\Database;
 use \Abstracts\Helpers\Validation;
 use \Abstracts\Helpers\Translation;
@@ -8,32 +9,33 @@ use \Abstracts\Helpers\Utilities;
 
 use \Abstracts\Abstracts;
 use \Abstracts\API;
+use \Abstracts\Module;
 use \Abstracts\User;
+use \Abstracts\Group;
+use \Abstracts\Page;
 
 use Exception;
+use DateTime;
 
 class Built {
 
   /* configuration */
-  private $id = null;
-  private $public_functions = array(
-	);
+  public $id = null;
+  public $public_functions = array();
+  public $module = null;
+  public $abstracts = null;
 
   /* core */
-  public $module = null;
   private $class = null;
   private $config = null;
   private $session = null;
   private $controls = null;
   private $identifier = null;
-  public $abstracts = null;
-  public $allowed_keys = array();
 
   /* helpers */
   private $database = null;
   private $validation = null;
   private $translation = null;
-  private $utilities = null;
 
   /* services */
   private $api = null;
@@ -56,36 +58,37 @@ class Built {
     "checkbox",
     "checkbox-inline"
   );
+  private $date_types = array(
+    "input-date"
+  );
+  private $datetime_types = array(
+    "input-datetime",
+    "input-time"
+  );
 
   function __construct(
-    $config,
     $session = null,
     $controls = null,
     $identifier = null
   ) {
 
     /* initialize: core */
-    $this->config = $config;
-    $this->session = $session;
+    $initialize = new Initialize($session, $controls, $identifier, false);
     $this->identifier = $identifier;
-    $this->module = Utilities::sync_module($config, $identifier);
-    $this->id = (!empty($this->module) ? $this->module->id : null);
-    $this->class = Utilities::get_class_name($identifier);
-    $this->controls = Utilities::sync_control(
-      $this->id, 
-      $session, 
-      $controls,
-      $this->module
-    );
+    $this->config = $initialize->config;
+    $this->session = $initialize->session;
+    $this->controls = $initialize->controls;
+    $this->id = $initialize->id;
+    $this->module = $initialize->module;
+    $this->class = $initialize->class;
     
     /* initialize: helpers */
-    $this->database = new Database($this->config, $this->session, $this->controls);
-    $this->validation = new Validation($this->config);
+    $this->database = new Database($this->session, $this->controls);
+    $this->validation = new Validation();
     $this->translation = new Translation();
-    $this->utilities = new Utilities();
 
     /* initialize: services */
-    $this->api = new API($this->config, $this->session, 
+    $this->api = new API($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
     $this->abstracts = $this->initialize($this->id);
@@ -96,16 +99,13 @@ class Built {
     $abstracts_data = null;
     if (!empty($module_id)) {
       $abstracts = new Abstracts(
-        $this->config, 
         $this->session, 
         Utilities::override_controls(true)
       );
-      try {
-        $abstracts_data = $abstracts->get($module_id);
-      } catch (Exception $e) {
+      $abstracts_data = $abstracts->get($module_id);
+      if (empty($abstracts_data)) {
         $abstracts_data = $this->simulate($module_id, $this->module);
       }
-      $this->allowed_keys = $this->keys($module_id, $this->module, $abstracts_data);
     }
     return $abstracts_data;
   }
@@ -116,74 +116,77 @@ class Built {
       if (!empty($this->module)) {
         if ($function == "get") {
           $result = $this->$function(
-            (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
-            (isset($parameters["get"]["activate"]) ? $parameters["get"]["activate"] : null)
+            (isset($parameters["id"]) ? $parameters["id"] : null),
+            (isset($parameters["active"]) ? $parameters["active"] : null),
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
           );
         } else if ($function == "list") {
           $result = $this->$function(
-            (isset($parameters["get"]["start"]) ? $parameters["get"]["start"] : null), 
-            (isset($parameters["get"]["limit"]) ? $parameters["get"]["limit"] : null), 
-            (isset($parameters["get"]["sort_by"]) ? $parameters["get"]["sort_by"] : null), 
-            (isset($parameters["get"]["sort_direction"]) ? $parameters["get"]["sort_direction"] : null), 
-            (isset($parameters["get"]["activate"]) ? $parameters["get"]["activate"] : null), 
-            (isset($parameters["post"]["filters"]) ? $parameters["post"]["filters"] : null), 
-            (isset($parameters["post"]["extensions"]) ? $parameters["post"]["extensions"] : null), 
-            (isset($parameters["get"]["key"]) ? $parameters["get"]["key"] : 
-              (isset($parameters["post"]["key"]) ? $parameters["post"]["key"] : null)
-            ),
-            (isset($parameters["get"]["value"]) ? $parameters["get"]["value"] : 
-              (isset($parameters["post"]["value"]) ? $parameters["post"]["value"] : null)
-            )
+            (isset($parameters["start"]) ? $parameters["start"] : null), 
+            (isset($parameters["limit"]) ? $parameters["limit"] : null), 
+            (isset($parameters["sort_by"]) ? $parameters["sort_by"] : null), 
+            (isset($parameters["sort_direction"]) ? $parameters["sort_direction"] : null), 
+            (isset($parameters["active"]) ? $parameters["active"] : null), 
+            (isset($parameters) ? $parameters : null), 
+            (isset($parameters["extensions"]) ? $parameters["extensions"] : null), 
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
           );
         } else if ($function == "count") {
           $result = $this->$function(
-            (isset($parameters["get"]["start"]) ? $parameters["get"]["start"] : null), 
-            (isset($parameters["get"]["limit"]) ? $parameters["get"]["limit"] : null), 
-            (isset($parameters["get"]["activate"]) ? $parameters["get"]["activate"] : null), 
-            (isset($parameters["post"]["filters"]) ? $parameters["post"]["filters"] : null), 
-            (isset($parameters["post"]["extensions"]) ? $parameters["post"]["extensions"] : null)
+            (isset($parameters["start"]) ? $parameters["start"] : null), 
+            (isset($parameters["limit"]) ? $parameters["limit"] : null), 
+            (isset($parameters["active"]) ? $parameters["active"] : null), 
+            (isset($parameters) ? $parameters : null), 
+            (isset($parameters["extensions"]) ? $parameters["extensions"] : null)
           );
         } else if ($function == "create") {
-          $result = $this->$function($parameters["post"]);
+          $result = $this->$function(
+            $parameters,
+            null,
+            $_FILES
+          );
         } else if ($function == "update") {
           $result = $this->$function(
-            (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
-            (isset($parameters["put"]) ? $parameters["put"] : null)
+            (isset($parameters["id"]) ? $parameters["id"] : null),
+            (isset($parameters) ? $parameters : null),
+            $_FILES
           );
         } else if ($function == "delete") {
           $result = $this->$function(
-            (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null)
+            (isset($parameters["id"]) ? $parameters["id"] : null)
           );
         } else if ($function == "patch") {
           $result = $this->$function(
-            (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
-            (isset($parameters["patch"]) ? $parameters["patch"] : null)
+            (isset($parameters["id"]) ? $parameters["id"] : null),
+            (isset($parameters) ? $parameters : null),
+            $_FILES
           );
         } else if ($function == "upload") {
           $result = $this->$function(
-            (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
+            (isset($parameters["id"]) ? $parameters["id"] : null),
             $_FILES
           );
-        } else if ($function == "remove_file") {
+        } else if ($function == "remove") {
           $result = $this->$function(
-            (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
-            (isset($parameters["patch"]) ? $parameters["patch"] : null)
+            (isset($parameters["id"]) ? $parameters["id"] : null),
+            (isset($parameters) ? $parameters : null)
           );
         } else if ($function == "data") {
           $result = $this->$function(
-            (isset($parameters["get"]["key"]) ? $parameters["get"]["key"] : null),
-            (isset($parameters["get"]["value"]) ? $parameters["get"]["value"] : null)
+            (isset($parameters["key"]) ? $parameters["key"] : null),
+            (isset($parameters["value"]) ? $parameters["value"] : null)
           );
-        } else if ($function == "list_option") {
+        } else if ($function == "options") {
           $result = $this->$function(
-            (isset($parameters["get"]["key"]) ? $parameters["get"]["key"] : null),
-            (isset($parameters["get"]["start"]) ? $parameters["get"]["start"] : null), 
-            (isset($parameters["get"]["limit"]) ? $parameters["get"]["limit"] : null), 
-            (isset($parameters["get"]["sort_by"]) ? $parameters["get"]["sort_by"] : null), 
-            (isset($parameters["get"]["sort_direction"]) ? $parameters["get"]["sort_direction"] : null), 
-            (isset($parameters["get"]["activate"]) ? $parameters["get"]["activate"] : null), 
-            (isset($parameters["post"]["filters"]) ? $parameters["post"]["filters"] : null), 
-            (isset($parameters["post"]["extensions"]) ? $parameters["post"]["extensions"] : null)
+            (isset($parameters["key"]) ? $parameters["key"] : null),
+            (isset($parameters["start"]) ? $parameters["start"] : null), 
+            (isset($parameters["limit"]) ? $parameters["limit"] : null), 
+            (isset($parameters["sort_by"]) ? $parameters["sort_by"] : null), 
+            (isset($parameters["sort_direction"]) ? $parameters["sort_direction"] : null), 
+            (isset($parameters["active"]) ? $parameters["active"] : null), 
+            (isset($parameters["filters"]) ? $parameters["filters"] : null), 
+            (isset($parameters["extensions"]) ? $parameters["extensions"] : null),
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
           );
         } else {
           throw new Exception($this->translation->translate("Function not supported"), 421);
@@ -195,27 +198,27 @@ class Built {
     return $result;
   }
 
-  function get($id, $activate = null) {
+  function get($id, $active = null, $return_references = false) {
     if ($this->validation->require($id, "ID")) {
 
-      $activate = !empty($activate) ? $activate : null;
+      $active = Initialize::active($active);
+      $return_references = Initialize::return_references($return_references);
 
       $filters = array("id" => $id);
-      if ($activate) {
-        $filters["activate"] = "1";
+      if (isset($active)) {
+        $filters["active"] = $active;
       }
+      
       $data = $this->database->select(
         ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
         "*", 
         $filters, 
         null, 
-        true,
-        $this->allowed_keys
+        $this->controls["view"]
       );
       if (!empty($data)) {
-        return $this->callback(__METHOD__, func_get_args(), $this->format($data));
+        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
       } else {
-        throw new Exception($this->translation->translate("Not found"), 404);
         return null;
       }
 
@@ -229,48 +232,45 @@ class Built {
     $limit = null, 
     $sort_by = "id", 
     $sort_direction = "desc", 
-    $activate = null, 
+    $active = null, 
     $filters = array(), 
     $extensions = array(),
-    $key = null, 
-    $value = null
+    $return_references = false
   ) {
-
-    $start = !empty($start) ? $start : null;
-    $limit = !empty($limit) ? $limit : null;
-    $sort_by = !empty($sort_by) ? $sort_by : "id";
-    $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
-    $activate = !empty($activate) ? $activate : null;
-    $filters = is_array($filters) ? $filters : array();
-    $extensions = is_array($extensions) ? $extensions : array();
-
+    
+    $start = Initialize::start($start);
+    $limit = Initialize::limit($limit);
+    $sort_by = Initialize::sort_by($sort_by);
+    $sort_direction = Initialize::sort_direction($sort_direction);
+    $active = Initialize::active($active);
+    $filters = Initialize::filters($filters);
+    $extensions = Initialize::extensions($extensions);
+    $return_references = Initialize::return_references($return_references);
+    
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
       
-      if (!empty($activate)) {
-        array_push($filters, array("activate" => true));
+      if (isset($active)) {
+        $filters["active"] = $active;
       }
-      if (!empty($key) && !empty($value)) {
-        $filters[$key] = $value;
-      }
+      
       $list = $this->database->select_multiple(
         ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
         "*", 
         $filters, 
-        $start, 
         $extensions, 
+        $start, 
         $limit, 
         $sort_by, 
         $sort_direction, 
-        $this->controls["view"],
-        $this->allowed_keys
+        $this->controls["view"]
       );
       if (!empty($list)) {
         $data = array();
-        foreach($list as $value) {
-          array_push($data, $this->format($value));
+        foreach ($list as $value) {
+          array_push($data, $this->format($value, $return_references));
         }
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
@@ -284,98 +284,96 @@ class Built {
   function count(
     $start = null, 
     $limit = null, 
-    $activate = null, 
+    $active = null, 
     $filters = array(), 
     $extensions = array()
   ) {
 
-    $start = !empty($start) ? $start : null;
-    $limit = !empty($limit) ? $limit : null;
-    $activate = !empty($activate) ? $activate : null;
-    $filters = is_array($filters) ? $filters : array();
-    $extensions = is_array($extensions) ? $extensions : array();
-
+    $start = Initialize::start($start);
+    $limit = Initialize::limit($limit);
+    $active = Initialize::active($active);
+    $filters = Initialize::filters($filters);
+    $extensions = Initialize::extensions($extensions);
+    
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
-      if (!empty($activate)) {
-        array_push($filters, array("activate" => true));
+      
+      if (isset($active)) {
+        $filters["active"] = $active;
       }
-      if (!empty($key) && !empty($value)) {
-        $filters[$key] = $value;
-      }
-      if (
-        $data = $this->database->count(
-          ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-          "*", 
-          $filters, 
-          $start, 
-          $extensions, 
-          $limit, 
-          $this->controls["view"],
-          $this->allowed_keys
-        )
-      ) {
-        return $data;
-      } else {
-        return null;
-      }
+      $data = $this->database->count(
+        ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        $filters, 
+        $extensions, 
+        $start, 
+        $limit, 
+        $this->controls["view"]
+      );
+      return $data;
     } else {
       return null;
     }
   }
 
-  function create($parameters, $user_id = 0) {
+  function create($parameters, $user_id = 0, $files = null) {
       
     /* initialize: parameters */
-    $parameters = $this->inform($parameters);
-    $parameters["id"] = (isset($parameters["id"]) ? $parameters["id"] : null);
-    $parameters["activate"] = (isset($parameters["activate"]) ? $parameters["activate"] : true);
-    $parameters["user_id"] = (!empty($user_id) ? $user_id : (!empty($this->session) ? $this->session->id : 0));
-    $parameters["date_created"] = gmdate("Y-m-d H:i:s");
+    $parameters = $this->inform($parameters, false, $user_id);
 
     if ($this->validate($parameters)) {
-      return $this->callback(
-        __METHOD__, 
-        func_get_args(), 
-        $this->format(
-          $this->database->insert(
-            ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-            $parameters, 
-            $this->controls["create"],
-            $this->allowed_keys
-          )
-        )
+      $data = $this->database->insert(
+        ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        $parameters, 
+        $this->controls["create"]
       );
+      if (!empty($data)) {
+        if (!empty($files)) {
+          $this->upload($data->id, $files);
+        }
+        return $this->callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data)
+        );
+      } else {
+        return $data;
+      }
     } else {
       return null;
     }
 
   }
 
-  function update($id, $parameters) {
-
+  function update($id, $parameters, $files = null) {
+    
     /* initialize: parameters */
-    $parameters = $this->inform($parameters);
+    $parameters = $this->inform($parameters, true);
     
     if ($this->validation->require($id, "ID")) {
 
       if ($this->validate($parameters, $id)) {
-        return $this->callback(
-          __METHOD__, 
-          func_get_args(), 
-          $this->format(
-            $this->database->update(
-              ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-              $parameters, 
-              array("id" => $id), 
-              null, 
-              $this->controls["update"],
-              $this->allowed_keys
-            )
-          )
+        $data = $this->database->update(
+          ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+          $parameters, 
+          array("id" => $id), 
+          null, 
+          $this->controls["update"]
         );
+        if (!empty($data)) {
+          $data = $data[0];
+          if (!empty($files)) {
+            $this->upload($data->id, $files);
+          }
+          return $this->callback(
+            __METHOD__, 
+            func_get_args(), 
+            $this->format($data)
+          );
+        } else {
+          return $data;
+        }
       } else {
         return null;
       }
@@ -386,28 +384,34 @@ class Built {
 
   }
 
-  function patch($id, $parameters) {
+  function patch($id, $parameters, $files = null) {
 
     /* initialize: parameters */
-    $parameters = $this->inform($parameters);
+    $parameters = $this->inform($parameters, true);
     
     if ($this->validation->require($id, "ID")) {
 
       if ($this->validate($parameters, $id, true)) {
-        return $this->callback(
-          __METHOD__, 
-          func_get_args(), 
-          $this->format(
-            $this->database->update(
-              ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-              $parameters, 
-              array("id" => $id), 
-              null, 
-              $this->controls["update"],
-              $this->allowed_keys
-            )
-          )
+        $data = $this->database->update(
+          ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+          $parameters, 
+          array("id" => $id), 
+          null, 
+          $this->controls["update"]
         );
+        if (!empty($data)) {
+          $data = $data[0];
+          if (!empty($files)) {
+            $this->upload($data->id, $files);
+          }
+          return $this->callback(
+            __METHOD__, 
+            func_get_args(), 
+            $this->format($data)
+          );
+        } else {
+          return $data;
+        }
       } else {
         return null;
       }
@@ -421,53 +425,65 @@ class Built {
   function delete($id) {
     if ($this->validation->require($id, "ID")) {
       if (
-        $data = $this->format(
-          $this->database->delete(
-            ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-            array("id" => $id), 
-            null, 
-            $this->controls["delete"],
-            $this->allowed_keys
-          )
+        $data = $this->database->delete(
+          ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+          array("id" => $id), 
+          null, 
+          $this->controls["delete"]
         )
       ) {
-
-        foreach($this->abstracts->references as $reference) {
+        $data = $data[0];
+        foreach ($this->abstracts->references as $reference) {
           if (in_array($reference->type, $this->file_types)) {
+
             $key = $reference->key;
-            if ($reference->type == "image-upload" || $reference->file_type == "image") {
-              if (
-                $reference->type == "input-file-multiple"
-                || $reference->type == "input-file-multiple-drop"
-              ) {
-                foreach($data as $value) {
-                  foreach($value->$key as $file) {
-                    $file_old = ".." . $file;
-                    if (!empty($file) && file_exists($file_old)) {
-                      chmod($file_old, 0777);
-                      unlink($file_old);
-                    }
+
+            $delete = function($reference, $file) {
+              try {
+                $file_old = Utilities::backtrace() . trim($file, "/");
+                if (!empty($file) && file_exists($file_old)) {
+                  chmod($file_old, 0777);
+                  unlink($file_old);
+                }
+                if ($reference->type == "image-upload" || $reference->file_type == "image") {
+                  $thumbnail_old = Utilities::get_thumbnail($file_old);
+                  if (file_exists($thumbnail_old) && !is_dir($thumbnail_old)) {
+                    chmod($thumbnail_old, 0777);
+                    unlink($thumbnail_old);
+                  }
+                  $large_old = Utilities::get_large($file_old);
+                  if (file_exists($large_old) && !is_dir($large_old)) {
+                    chmod($large_old, 0777);
+                    unlink($large_old);
                   }
                 }
-              } else {
-                foreach($data as $value) {
-                  $file_old = ".." . $value->$key;
-                  if (!empty($value->$key) && file_exists($file_old)) {
-                    chmod($file_old, 0777);
-                    unlink($file_old);
-                  }
+                return true;
+              } catch(Exception $e) {
+                return false;
+              }
+            };
+
+            if (
+              $reference->type == "input-file-multiple"
+              || $reference->type == "input-file-multiple-drop"
+            ) {
+              if (!empty($data->$key)) {
+                foreach (unserialize($data->$key) as $file) {
+                  $delete($reference, $file);
                 }
               }
+            } else {
+              $delete($reference, $data->$key);
             }
-          }
-        }
 
+          }
+
+        }
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
-          $data
+          $this->format($data)
         );
-
       } else {
         return null;
       }
@@ -485,8 +501,11 @@ class Built {
           "*", 
           array("id" => $id), 
           null, 
-          true,
-          $this->allowed_keys
+          (
+            ($this->controls["create"] === true || $this->controls["update"] === true) ?
+            true : 
+            array_merge($this->controls["create"], $this->controls["update"])
+          )
         )
       )) {
         
@@ -581,14 +600,19 @@ class Built {
           }
           
           $info = pathinfo($name);
-          $extension = strtolower($info["extension"]);
+          $extension = strtolower(isset($info["extension"]) ? $info["extension"] : null);
+          if (empty($extension)) {
+            if (strpos($type, "image/") === 0) {
+              $extension = str_replace("image/", "", $type);
+            }
+          }
           $basename = $info["basename"];
-          $name = $info["filename"];
+          $file_name = $basename . "." . $extension;
           $name_encrypted = gmdate("YmdHis") . "_" . $data_target->id . "_" . uniqid();
-          $name_save = $name_encrypted . "." . $extension;
+          $file = $name_encrypted . "." . $extension;
     
-          $media_directory = "/" . trim((isset($this->config->media_path) ? $this->config->media_path : "media"), "/") . "/";
-          $media_directory_path = ".." . $media_directory;
+          $media_directory = "/" . trim((isset($this->config["media_path"]) ? $this->config["media_path"] : "media"), "/") . "/";
+          $media_directory_path = Utilities::backtrace() . trim($media_directory, "/") . "/";
 
           $upload_directory = $media_directory . trim($destination, "/") . "/";
           $upload_directory_path = $media_directory_path . trim($destination, "/") . "/";
@@ -598,44 +622,60 @@ class Built {
           if (!file_exists($upload_directory_path)) {
             mkdir($upload_directory_path, 0777, true);
           }
-          $path = $upload_directory_path . $name_save;
-          $path_save = $upload_directory . $name_save;
+          $destination = $upload_directory_path . $file;
+          $path = $upload_directory . $file;
     
           if (file_exists($upload_directory_path)) {
             $upload_result = false;
+            $unsupported_image = false;
             if ($reference->type == "image-upload" || $reference->file_type == "image") {
               try {
-                $image = null;
-                $image_info = getimagesize($tmp_name);
-                if ($image_info["mime"] == 'image/jpeg') {
-                  $image = imagecreatefromjpeg($tmp_name);
-                } else if ($image_info["mime"] == 'image/gif') {
-                  $image = imagecreatefromgif($tmp_name);
-                } else if ($image_info["mime"] == 'image/png') {
-                  $image = imagecreatefrompng($tmp_name);
+                $resize = false;
+                if ($reference->image_width && $reference->image_height) {
+                  $resize = true;
                 }
-                if (is_null($image)) {
-                  $upload_result = move_uploaded_file($tmp_name, $path);
-                } else {
-                  $upload_result = imagejpeg($image, $path, $image_options["quality"]);
-                }
+                $upload_result = Utilities::create_image(
+                  $tmp_name, 
+                  $destination, 
+                  $resize,
+                  $reference->image_width, 
+                  $reference->image_height, 
+                  null, 
+                  $image_options["quality"]
+                );
               } catch(Exception $e) {
-                $upload_result = move_uploaded_file($tmp_name, $path);
+                if ($e->getCode() == 415 || $e->getCode() == 500) {
+                  $upload_result = move_uploaded_file($tmp_name, $destination);
+                  $unsupported_image = true;
+                }
               }
             } else {
-              $upload_result = move_uploaded_file($tmp_name, $path);
+              $upload_result = move_uploaded_file($tmp_name, $destination);
             }
             if ($upload_result) {
     
-              $parameter = $path_save;
+              $parameter = $path;
               if (
                 $reference->type == "input-file-multiple"
                 || $reference->type == "input-file-multiple-drop"
               ) {
                 $key = $reference->key;
-                $parameter = unserialize($data_target->$key);
-                array_push($parameter, $path_save);
-                $parameter = serialize($parameter);
+                $parameter = array();
+                if (
+                  $uploaded_data = $this->database->select(
+                    ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                    array($key), 
+                    array("id" => $data_target->id), 
+                    null, 
+                    true
+                  )
+                ) {
+                  if (!empty($uploaded_data->$key)) {
+                    $parameter = unserialize($uploaded_data->$key);
+                  }
+                  array_push($parameter, $path);
+                  $parameter = serialize($parameter);
+                }
               }
               $parameters = array(
                 $reference->key => $parameter
@@ -646,35 +686,40 @@ class Built {
                   $parameters, 
                   array("id" => $data_target->id), 
                   null, 
-                  $this->controls["update"],
-                  $this->allowed_keys
+                  (
+                    ($this->controls["create"] === true || $this->controls["update"] === true) ?
+                    true : 
+                    array_merge($this->controls["create"], $this->controls["update"])
+                  )
                 )
               ) {
                 if ($reference->type == "image-upload" || $reference->file_type == "image") {
-                  if ($image_options["thumbnail"] == true) {
+                  if (!empty($image_options["thumbnail"]) && !$unsupported_image) {
                     $thumbnail_directory_path	= $upload_directory_path . "thumbnail/";
                     if (!file_exists($thumbnail_directory_path)) {
                       mkdir($thumbnail_directory_path, 0777, true);
                     }
-                    $thumbnail = $thumbnail_directory_path . $name_save;
-                    Utilities::generate_thumbnail(
-                      $path, 
+                    $thumbnail = $thumbnail_directory_path . $file;
+                    Utilities::create_image(
+                      $destination, 
                       $thumbnail, 
+                      true,
                       $image_options["thumbnail_width"], 
                       $image_options["thumbnail_height"], 
                       $image_options["thumbnail_aspectratio"], 
                       $image_options["thumbnail_quality"]
                     );
                   }
-                  if ($image_options["large"] == true) {
+                  if (!empty($image_options["large"]) && !$unsupported_image) {
                     $large_directory_path	= $upload_directory_path . "large/";
                     if (!file_exists($large_directory_path)) {
                       mkdir($large_directory_path, 0777, true);
                     }
-                    $large = $large_directory_path . $name_save;
-                    Utilities::generate_thumbnail(
-                      $path, 
+                    $large = $large_directory_path . $file;
+                    Utilities::create_image(
+                      $destination, 
                       $large, 
+                      true,
                       $image_options["large_width"], 
                       $image_options["large_height"], 
                       $image_options["large_aspectratio"], 
@@ -696,12 +741,12 @@ class Built {
                   }
                 }
                 
-                return true;
+                return $path;
 
               } else {
-                if (file_exists($path) && !is_dir($path)) {
-                  chmod($path, 0777);
-                  unlink($path);
+                if (file_exists($destination) && !is_dir($destination)) {
+                  chmod($destination, 0777);
+                  unlink($destination);
                 }
                 return false;
               }
@@ -713,39 +758,44 @@ class Built {
           }
         };
 
-        $success = array();
+        $successes = array();
         $errors = array();
-        foreach($this->abstracts->references as $reference) {
+        foreach ($this->abstracts->references as $reference) {
           if (in_array($reference->type, $this->file_types)) {
             $key = $reference->key;
             if (
               $reference->type == "input-file-multiple"
               || $reference->type == "input-file-multiple-drop"
             ) {
-              for ($i = 0; $i < count($files[$key]["name"]); $i++) {
-                if (isset($files[$key]) && isset($files[$key]["name"][$i]) && !empty($files[$key]["name"][$i])) {
-                  if (
-                    $upload(
-                      $reference,
-                      $data_current,
-                      $reference->upload_folder,
-                      $files[$key]["name"][$i],
-                      $files[$key]["type"][$i],
-                      $files[$key]["tmp_name"][$i],
-                      $files[$key]["error"][$i],
-                      $files[$key]["size"][$i]
-                    )
-                  ) {
-                    array_push($success, $files[$key]["name"][$i]);
-                  } else {
-                    array_push($errors, $files[$key]["name"][$i]);
+              if (isset($files[$key]) && isset($files[$key]["name"])) {
+                for ($i = 0; $i < count($files[$key]["name"]); $i++) {
+                  if (isset($files[$key]["name"][$i])) {
+                    if (
+                      $path = $upload(
+                        $reference,
+                        $data_current,
+                        $reference->upload_folder,
+                        $files[$key]["name"][$i],
+                        $files[$key]["type"][$i],
+                        $files[$key]["tmp_name"][$i],
+                        $files[$key]["error"][$i],
+                        $files[$key]["size"][$i]
+                      )
+                    ) {
+                      array_push($successes, array(
+                        "source" => $files[$key]["name"][$i],
+                        "destination" => $path
+                      ));
+                    } else {
+                      array_push($errors, $files[$key]["name"][$i]);
+                    }
                   }
                 }
               }
             } else {
-              if (isset($files[$key]) && isset($files[$key]["name"]) && !empty($files[$key]["name"])) {
+              if (isset($files[$key]) && isset($files[$key]["name"])) {
                 if (
-                  $upload(
+                  $path = $upload(
                     $reference,
                     $data_current,
                     $reference->upload_folder,
@@ -756,7 +806,10 @@ class Built {
                     $files[$key]["size"]
                   )
                 ) {
-                  array_push($success, $files[$key]["name"]);
+                  array_push($successes, array(
+                    "source" => $files[$key]["name"],
+                    "destination" => $path
+                  ));
                 } else {
                   array_push($errors, $files[$key]["name"]);
                 }
@@ -765,16 +818,14 @@ class Built {
           }
         }
         
-        if (empty(count($errors)) || empty($success)) {
-          if (!empty($success)) {
-            return $this->callback(__METHOD__, func_get_args(), $success);
+        if (empty($errors)) {
+          if (!empty($successes)) {
+            return $this->callback(__METHOD__, func_get_args(), $successes);
           } else {
             throw new Exception($this->translation->translate("No file has been uploaded"), 409);
-            return null;
           }
         } else {
           throw new Exception($this->translation->translate("Unable to upload") . " '" . implode("', '", $errors) . "'", 409);
-          return null;
         }
 
       } else {
@@ -786,7 +837,7 @@ class Built {
     }
   }
 
-  function remove_file($id, $parameters) {
+  function remove($id, $parameters) {
     if ($this->validation->require($id, "ID")) {
       if (!empty($parameters)) {
         
@@ -796,14 +847,17 @@ class Built {
             "*", 
             array("id" => $id), 
             null, 
-            true,
-            $this->allowed_keys
+            (
+              ($this->controls["create"] === true || $this->controls["update"] === true || $this->controls["delete"] === true) ?
+              true : 
+              array_merge($this->controls["create"], $this->controls["update"], $this->controls["delete"])
+            )
           )
         )) {
 
           $delete = function($reference, $file) {
             try {
-              $file_old = ".." . $file;
+              $file_old = Utilities::backtrace() . trim($file, "/");
               if (!empty($file) && file_exists($file_old)) {
                 chmod($file_old, 0777);
                 unlink($file_old);
@@ -826,57 +880,64 @@ class Built {
             }
           };
 
-          $success = array();
+          $successes = array();
           $errors = array();
-          foreach($this->abstracts->references as $reference) {
+          foreach ($this->abstracts->references as $reference) {
             if (in_array($reference->type, $this->file_types)) {
               $key = $reference->key;
               if (isset($parameters[$key])) {
 
                 if (is_array($parameters[$key])) {
-                  foreach($parameters[$key] as $file) {
+                  foreach ($parameters[$key] as $file) {
                     if ($delete($reference, $file)) {
-                      array_push($success, $file);
+                      array_push($successes, $file);
                     } else {
                       array_push($errors, $file);
                     }
                   }
                 } else {
                   if ($delete($reference, $parameters[$key])) {
-                    array_push($success, $parameters[$key]);
+                    array_push($successes, $parameters[$key]);
                   } else {
                     array_push($errors, $parameters[$key]);
                   }
                 }
 
-                if (count($success)) {
-                  $parameter = $success[0];
+                if (count($successes)) {
+                  $parameter = "";
                   if (
                     $reference->type == "input-file-multiple"
                     || $reference->type == "input-file-multiple-drop"
                   ) {
                     $key = $reference->key;
                     $parameter = unserialize($data_current->$key);
-                    for ($i = 0; $i < count($success); $i++) {
-                      unset($parameter[$i]);
+                    if (!empty($parameter)) {
+                      for ($i = 0; $i < count($successes); $i++) {
+                        for ($j = 0; $j < count($parameter); $j++) {
+                          if ($successes[$i] == $parameter[$j]) {
+                            array_splice($parameter, $j, 1);
+                          }
+                        }
+                      }
+                      $parameter = serialize($parameter);
+                    } else {
+                      $parameter = serialize(array());
                     }
-                    $parameter = serialize($parameter);
                   }
                   $parameters = array(
                     $reference->key => $parameter
                   );
-                  if (
-                    $this->database->update(
-                      ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-                      $parameters, 
-                      array("id" => $data_current->id), 
-                      null, 
-                      $this->controls["update"],
-                      $this->allowed_keys
+                  $this->database->update(
+                    ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                    $parameters, 
+                    array("id" => $data_current->id), 
+                    null, 
+                    (
+                      ($this->controls["create"] === true || $this->controls["update"] === true || $this->controls["delete"] === true) ?
+                      true : 
+                      array_merge($this->controls["create"], $this->controls["update"], $this->controls["delete"])
                     )
-                  ) {
-                    
-                  }
+                  );
                   
                 }
 
@@ -884,63 +945,57 @@ class Built {
             }
           }
 
-          if (empty(count($errors))) {
-            return $this->callback(__METHOD__, func_get_args(), $success);
+          if (empty($errors)) {
+            return $this->callback(__METHOD__, func_get_args(), $successes);
           } else {
             throw new Exception($this->translation->translate("Unable to delete") . " '" . implode("', '", $reference->key) . "'", 409);
-            return null;
           }
 
         } else {
           throw new Exception($this->translation->translate("Not found"), 404);
-          return null;
         }
 
       } else {
         throw new Exception($this->translation->translate("File(s) not found"), 404);
-        return null;
       }
-    } else {
-      return null;
     }
   }
 
-  function list_option(
+  function options(
     $key, 
     $start = null, 
     $limit = null, 
     $sort_by = "id", 
     $sort_direction = "desc", 
-    $activate = null, 
+    $active = null, 
     $filters = array(), 
-    $extensions = array()
+    $extensions = array(), 
+    $return_references = false
   ) {
 
-    $start = !empty($start) ? $start : null;
-    $limit = !empty($limit) ? $limit : null;
-    $sort_by = !empty($sort_by) ? $sort_by : "id";
-    $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
-    $activate = !empty($activate) ? $activate : null;
+    $start = Initialize::start($start);
+    $limit = Initialize::limit($limit);
+    $sort_by = Initialize::sort_by($sort_by);
+    $sort_direction = Initialize::sort_direction($sort_direction);
+    $active = Initialize::active($active);
     $filters = is_array($filters) ? $filters : array();
-    $extensions = is_array($extensions) ? $extensions : array();
+    $extensions = Initialize::extensions($extensions);
+    $return_references = Initialize::return_references($return_references);
 
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
-      array_push($filters, array("activate" => true));
-      if (!empty($activate)) {
-        array_push($filters, array("activate" => true));
-      }
-      if (!empty($key) && !empty($value)) {
-        $filters[$key] = $value;
+      $filters["active"] = true;
+      if (isset($active)) {
+        $filters["active"] = $active;
       }
       $list = $this->database->select_multiple(
         $key, 
         "*", 
         $filters, 
-        $start, 
         $extensions, 
+        $start, 
         $limit, 
         $sort_by, 
         $sort_direction, 
@@ -948,8 +1003,8 @@ class Built {
       );
       if (!empty($list)) {
         $data = array();
-        foreach($list as $value) {
-          array_push($data, $this->format($value));
+        foreach ($list as $value) {
+          array_push($data, $this->format($value, $return_references));
         }
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
@@ -960,90 +1015,198 @@ class Built {
     }
   }
 
-  function inform($parameters) {
+  function inform($parameters, $update = false, $user_id = 0) {
     if (!empty($parameters)) {
-      foreach($this->abstracts->references as $reference) {
-        if (isset($parameters[$reference->key])) {
-          if (in_array($reference->type, $this->file_types)) {
-            unset($parameters[$reference->key]);
-            $parameters[$reference->key] = "";
-          } else {
+      if (!$update) {
+        if (isset($parameters["id"])) {
+          $parameters["id"] = $parameters["id"];
+        } else {
+          $parameters["id"] = null;
+        }
+        $parameters["active"] = (isset($parameters["active"]) ? $parameters["active"] : true);
+        $parameters["user_id"] = (!empty($user_id) ? $user_id : (!empty($this->session) ? $this->session->id : 0));
+        $parameters["create_at"] = gmdate("Y-m-d H:i:s");
+      } else {
+        unset($parameters["id"]);
+        unset($parameters["create_at"]);
+      }
+      foreach ($this->abstracts->references as $reference) {
+        if (array_key_exists($reference->key, $parameters)) {
+          $inform_single = function($reference, $value) {
             if (in_array($reference->type, $this->multiple_types)) {
-              if ($reference->type == "serialize") {
-                $parameters[$reference->key] = serialize($parameters[$reference->key]);
+              if (
+                empty($reference->input_multiple_format)
+                || $reference->input_multiple_format == "serialize"
+              ) {
+                if (!empty($value)) {
+                  if (serialize($value)) {
+                    return serialize($value);
+                  } else {
+                    return serialize(array());
+                  }
+                } else {
+                  return serialize(array());
+                }
               } else {
-                $parameters[$reference->key] = implode(",", $parameters[$reference->key]);
+                if (!empty($value)) {
+                  return implode(",", $value);
+                } else {
+                  return "";
+                }
+              }
+            } else {
+              return $value;
+            }
+          };
+          if ($reference->type != "input-multiple") {
+            if (in_array($reference->type, $this->file_types)) {
+              unset($parameters[$reference->key]);
+              if (empty($update)) {
+                $parameters[$reference->key] = "";
+              }
+            } else {
+              $parameters[$reference->key] = $inform_single($reference, $parameters[$reference->key]);
+            }
+          } else {
+            $parameters[$reference->key] = serialize($parameters[$reference->key]);
+            foreach ($reference->references as $reference_multiple) {
+              if (array_key_exists($reference_multiple->key, $parameters[$reference->key])) {
+                if (in_array($reference_multiple->type, $this->file_types)) {
+                  unset($parameters[$reference->key][$reference_multiple->key]);
+                  if (empty($update)) {
+                    $parameters[$reference->key][$reference_multiple->key] = "";
+                  }
+                } else {
+                  $parameters[$reference->key][$reference_multiple->key] 
+                  = $inform_single($reference_multiple, $parameters[$reference->key][$reference_multiple->key]);
+                }
               }
             }
           }
         }
       }
     }
-    return $parameters;
+    return $this->callback(__METHOD__, func_get_args(), $parameters);
   }
 
-  function format($data, $prevent_data = false, $abstracts_override = null) {
+  function format($data, $return_references = false, $abstracts_override = null) {
     if (!empty($data)) {
+      if ($data->active === "1") {
+        $data->active = true;
+      } else if ($data->active === "0" || empty($data->active)) {
+        $data->active = false;
+      }
       $abstracts = $this->abstracts;
       if (!empty($abstracts_override)) {
         $abstracts = $abstracts_override;
       }
-      if (!empty($this->abstracts->component_module)) {
-        $data->module_id_data = $this->database->select(
-          "module", 
-          "*", 
-          array("id" => $data->module_id), 
-          null, 
-          true
-        );
+      if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+        if (!empty($this->abstracts->component_module)) {
+          $module = new Module($this->session, $this->controls);
+          $data->module_id_reference = $module->format(
+            $this->database->get_reference(
+              $data->module_id, 
+              "module", 
+              "id"
+            )
+          );
+        }
       }
-      if (!empty($this->abstracts->component_user)) {
-        $user = new User($this->config, $this->session, $this->controls);
-        $data->user_id_data = $user->format(
-          $this->database->select(
-            "user", 
-            "*", 
-            array("id" => $data->user_id), 
-            null, 
-            true
-          ),
-          true
-        );
+      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (!empty($this->abstracts->component_user)) {
+          $user = new User($this->session, $this->controls);
+          $data->user_id_reference = $user->format(
+            $this->database->get_reference(
+              $data->user_id, 
+              "user", 
+              "id"
+            )
+          );
+        }
       }
-      if (!empty($this->abstracts->component_group)) {
-        $data->group_id_data = $this->database->select(
-          "group", 
-          "*", 
-          array("id" => $data->group_id), 
-          null, 
-          true
-        );
+      if ($return_references === true || (is_array($return_references) && in_array("group_id", $return_references))) {
+        if (!empty($this->abstracts->component_group)) {
+          $group = new Group($this->session, $this->controls);
+          $data->group_id_reference = $group->format(
+            $this->database->get_reference(
+              $data->group_id, 
+              "group", 
+              "id"
+            )
+          );
+        }
       }
-      if (!empty($this->abstracts->component_page)) {
-        $data->page_id_data = $this->database->select(
-          "page", 
-          "*", 
-          array("id" => $data->page_id), 
-          null, 
-          true
-        );
+      if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
+        if (!empty($this->abstracts->component_page)) {
+          $page = new Page($this->session, $this->controls);
+          $data->page_id_reference = $page->format(
+            $this->database->get_reference(
+              $data->page_id, 
+              "page", 
+              "id"
+            )
+          );
+        }
       }
-      foreach($abstracts->references as $reference) {
+      foreach ($abstracts->references as $reference) {
         $key = $reference->key;
         if (isset($data->$key)) {
 
-          if (empty($abstracts_override) || $prevent_data) {
-            if (!is_null($key_data = $this->data(null, $reference->key, $data))) {
-              $data_key = $reference->key . "_data";
-              $data->$data_key = $key_data;
+          if (empty($abstracts_override)) {
+            if ($return_references === true || (is_array($return_references) && in_array($key, $return_references))) {
+              if (
+                $reference->input_option == "dynamic"
+                && !empty($reference->input_option_dynamic_module)
+                && !empty($reference->input_option_dynamic_value_key)
+              ) {
+                if (!empty(
+                  $module_data = $this->database->select(
+                    "module", 
+                    "*", 
+                    array("id" => $reference->input_option_dynamic_module), 
+                    null, 
+                    true,
+                    false
+                  )
+                )) {
+                  $abstracts = $this->initialize($module_data->id);
+                  if (!empty($abstracts)) {
+                    $reference_key = $reference->key . "_reference";
+                    $data->$reference_key = $this->format(
+                      $this->database->get_reference(
+                        $data->$key, 
+                        $module_data->database_table, 
+                        $reference->input_option_dynamic_value_key
+                      ),
+                      false,
+                      $abstracts
+                    );
+                  }
+                }
+              }
             }
           }
 
           if (in_array($reference->type, $this->multiple_types)) {
-            if ($reference->type == "serialize") {
-              $data->$key = unserialize($data->$key);
+            if (
+              empty($reference->input_multiple_format)
+              || $reference->input_multiple_format == "serialize" 
+            ) {
+              if (!empty($data->$key)) {
+                if (unserialize($data->$key)) {
+                  $data->$key = unserialize($data->$key);
+                } else {
+                  $data->$key = array();
+                }
+              } else {
+                $data->$key = array();
+              }
             } else {
-              $data->$key = explode(",", $data->$key);
+              if (!empty($data->$key)) {
+                $data->$key = explode(",", $data->$key);
+              } else {
+                $data->$key = array();
+              }
             }
           }
 
@@ -1051,9 +1214,10 @@ class Built {
             $reference->type == "image-upload" || $reference->file_type == "image"
             || in_array($reference->type, $this->file_types)
           ) {
-            $path_key = $reference->key . "_path";
+            $path_key = $reference->key . "_reference";
             $format_path = function($reference, $value) {
               $path = (object) array(
+                "id" => $value,
                 "name" => basename($value),
                 "original" => null,
                 "thumbnail" => null,
@@ -1064,201 +1228,122 @@ class Built {
                 if (strpos($value, "http://") !== 0 || strpos($value, "https://") !== 0) {
                   $path->original = $this->config["base_url"] . $value;
                 }
-                $path->thumbnail= Utilities::get_thumbnail($path->original);
-                $path->large = Utilities::get_large($path->original);
+                $path_thumnail = "";
+                if (file_exists(Utilities::get_thumbnail(Utilities::backtrace() . $value))) {
+                  $path_thumnail = Utilities::get_thumbnail($path->original);
+                }
+                $path->thumbnail = $path_thumnail;
+                $path_large = "";
+                if (file_exists(Utilities::get_large(Utilities::backtrace() . $value))) {
+                  $path_large = Utilities::get_large($path->original);
+                }
+                $path->large = $path_large;
               } else if (in_array($reference->type, $this->file_types)) {
-                $path = $value;
+                $path = (object) array(
+                  "id" => $value,
+                  "name" => basename($value),
+                  "path" => null
+                );
                 if (strpos($value, "http://") !== 0 || strpos($value, "https://") !== 0) {
-                  $path = $this->config["base_url"] . $value;
+                  $path->path = $this->config["base_url"] . $value;
                 }
               }
               return $path;
             };
             if (is_array($data->$key)) {
               $data->$path_key = array();
-              foreach($data->$key as $value) {
-                array_push($data->$path_key, $format_path($reference, $value));
+              foreach ($data->$key as $key_value) {
+                array_push($data->$path_key, $format_path($reference, $key_value));
               }
             } else {
               $data->$path_key = $format_path($reference, $data->$key);
             }
-            $data->$key = basename($data->$key);
           }
 
         }
       }
     }
-    return $data;
-  }
-
-  function data($id = null, $key, $data_override = null) {
-    if ($this->validation->require($key, "Key")) {
-      if (empty($data_override)) {
-        if ($this->validation->require($id, "ID")  && $this->validation->require($key, "Key")) {
-          $filters = array("id" => $id);
-          $data_override = $this->database->select(
-            ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-            array("`" . $key . "`"), 
-            $filters, 
-            null, 
-            true
-          );
-        } else {
-          return null;
-        }
-      }
-      if (!empty($data_override) && isset($data_override->$key)) {
-  
-        $result = null;
-  
-        foreach($this->abstracts->references as $reference) {
-          if ($reference->key == $key && $reference->input_option == "dynamic") {
-  
-            if (in_array($reference->type, $this->multiple_types)) {
-              if ($reference->type == "serialize") {
-                $data_override->$key = unserialize($data_override->$key);
-              } else {
-                $data_override->$key = explode(",", $data_override->$key);
-              }
-            }
-  
-            $get_data = function($reference, $value) {
-              $data = $value;
-              if (!empty($reference->input_option_dynamic_module) && !empty($reference->input_option_dynamic_value_key)) {
-                if ($value !== "" && !is_null($value)) {
-                  $abstracts = new Abstracts(
-                    $this->config, 
-                    $this->session, 
-                    Utilities::override_controls(true)
-                  );
-                  $key_abstracts = $abstracts->get($reference->input_option_dynamic_value_key);
-                  if (!empty($key_abstracts)) {
-                    
-                    if (intval($reference->input_option_dynamic_module) > 100) {
-                      $data = $this->format(
-                        $this->database->select(
-                          $reference->input_option_dynamic_module, 
-                          "*", 
-                          array($reference->input_option_dynamic_value_key => $value), 
-                          null, 
-                          true
-                        ),
-                        true,
-                        $key_abstracts
-                      );
-                    } else {
-                      if ($reference->input_option_dynamic_module == "6") {
-                        $user = new User($this->config, $this->session, $this->controls);
-                        $data = $user->format($data, true);
-                      }
-                    }
-                  }
-                }
-              }
-              return $data;
-            };
-            
-            if (is_array($data_override->$key)) {
-              $result = array();
-              foreach($data_override->$key as $value) {
-                array_push($result, $get_data($reference, $value));
-              }
-            } else {
-              $result = $get_data($reference, $data_override->$key);
-            }
-            
-          }
-        }
-  
-        return $this->callback(__METHOD__, func_get_args(), $result);
-  
-      } else {
-        throw new Exception($this->translation->translate("Not found"), 404);
-        return null;
-      }
-    } else {
-      return null;
-    }
+    return $this->callback(__METHOD__, func_get_args(), $data);
   }
 
   function validate($parameters, $target_id = null, $patch = false) {
     $result = false;
-    foreach($this->abstracts->references as $reference) {
+    foreach ($this->abstracts->references as $reference) {
       if (in_array($reference->type, $this->file_types)) {
         $result = true;
       } else {
         if (!empty($parameters)) {
-          if (!empty($parameters) && ($this->validation->set($parameters, $reference->key) || $patch)) {
+          if ($this->validation->set($parameters, $reference->key, $patch)) {
             if (
               (
                 empty($reference->require) 
-                || $this->validation->require($parameters[$reference->key], $reference->label)
+                || $this->validation->require(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $patch)
               ) || (
                 empty($reference->validate_number) 
-                || $this->validation->number($parameters[$reference->key], $reference->label)
+                || $this->validation->number(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_number_min) 
-                || $this->validation->number_min($parameters[$reference->key], $reference->label, $reference->validate_number_min)
+                || $this->validation->number_min(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_number_min)
               ) || (
                 empty($reference->validate_number_max) 
-                || $this->validation->number_max($parameters[$reference->key], $reference->label, $reference->validate_number_max)
+                || $this->validation->number_max(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_number_max)
               ) || (
                 empty($reference->validate_decimal) 
-                || $this->validation->decimal($parameters[$reference->key], $reference->label)
+                || $this->validation->decimal(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_decimal_min) 
-                || $this->validation->decimal_min($parameters[$reference->key], $reference->label, $reference->validate_decimal_min)
+                || $this->validation->decimal_min(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_decimal_min)
               ) || (
                 empty($reference->validate_decimal_max) 
-                || $this->validation->decimal_max($parameters[$reference->key], $reference->label, $reference->validate_decimal_max)
+                || $this->validation->decimal_max(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_decimal_max)
               ) || (
                 empty($reference->validate_datetime) 
-                || $this->validation->datetime($parameters[$reference->key], $reference->label, $reference->validate_date)
+                || $this->validation->datetime(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_date)
               ) || (
                 empty($reference->validate_datetime_min) 
-                || $this->validation->datetime_min($parameters[$reference->key], $reference->label, $reference->validate_datetime_min)
+                || $this->validation->datetime_min(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_datetime_min)
               ) || (
                 empty($reference->validate_datetime_max) 
-                || $this->validation->datetime_max($parameters[$reference->key], $reference->label, $reference->validate_datetime_max)
+                || $this->validation->datetime_max(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_datetime_max)
               ) || (
                 empty($reference->validate_string_min) 
-                || $this->validation->string_min($parameters[$reference->key], $reference->label, $reference->validate_string_min)
+                || $this->validation->string_min(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_string_min)
               ) || (
                 empty($reference->validate_string_max) 
-                || $this->validation->string_max($parameters[$reference->key], $reference->label, $reference->validate_string_max)
+                || $this->validation->string_max(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->validate_string_max)
               ) || (
                 empty($reference->validate_email) 
-                || $this->validation->email($parameters[$reference->key], $reference->label)
+                || $this->validation->email(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_password) 
-                || $this->validation->password($parameters[$reference->key], $reference->label)
+                || $this->validation->password(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_password_equal_to) 
-                || $this->validation->password_equal_to($parameters[$reference->key], $reference->label, $parameters[$reference->validate_password_equal_to])
+                || $this->validation->password_equal_to(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $parameters[$reference->validate_password_equal_to])
               ) || (
                 empty($reference->validate_url) 
-                || $this->validation->url($parameters[$reference->key], $reference->label)
+                || $this->validation->url(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_unique) 
-                || $this->validation->unique($parameters[$reference->key], $reference->label, $reference->key, $this->module->database_table, $reference->validate_unique, $target_id)
+                || $this->validation->unique(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label, $reference->key, $this->module->database_table, $reference->validate_unique, $target_id)
               ) || (
                 empty($reference->validate_no_spaces) 
-                || $this->validation->no_spaces($parameters[$reference->key], $reference->label)
+                || $this->validation->no_spaces(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_no_special_characters) 
-                || $this->validation->no_special_characters($parameters[$reference->key], $reference->validate_no_special_characters, $reference->validate_no_special_characters)
+                || $this->validation->no_special_characters(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->validate_no_special_characters, $reference->validate_no_special_characters)
               ) || (
                 empty($reference->validate_no_digit) 
-                || $this->validation->no_digit($parameters[$reference->key], $reference->label)
+                || $this->validation->no_digit(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_uppercase_only) 
-                || $this->validation->uppercase_only($parameters[$reference->key], $reference->label)
+                || $this->validation->uppercase_only(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_lowercase_only)
-                || $this->validation->lowercase_only($parameters[$reference->key], $reference->label)
+                || $this->validation->lowercase_only(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               ) || (
                 empty($reference->validate_key) 
-                || $this->validation->key($parameters[$reference->key], $reference->label)
+                || $this->validation->key(isset($parameters[$reference->key]) ? $parameters[$reference->key] : null, $reference->label)
               )
             ) {
               $result = true;
@@ -1269,68 +1354,7 @@ class Built {
         }
       }
     }
-    return $result;
-  }
-
-  function keys(
-    $module_id = null, 
-    $override_module = null, 
-    $override_abstracts = null
-  ) {
-    $allowed_keys = array();
-    $abstracts_data = $override_abstracts;
-    if (empty($override_abstracts)) {
-      $abstracts = new Abstracts(
-        $this->config, 
-        $this->session, 
-        Utilities::override_controls(true)
-      );
-      try {
-        $abstracts_data = $abstracts->get($module_id);
-      } catch (Exception $e) {
-        $abstracts_data = $this->simulate($module_id, $override_module);
-      }
-    }
-    if (!empty($abstracts_data)) {
-      $default_keys = array(
-        "id",
-        "activate",
-        "date_created"
-      );
-      if ($abstracts_data->data_sortable) {
-        array_push($default_keys, "order");
-      }
-      if ($abstracts_data->component_module) {
-        array_push($default_keys, "module_id");
-        array_push($default_keys, "module_key");
-        array_push($default_keys, "module_target");
-      }
-      if ($abstracts_data->component_group) {
-        array_push($default_keys, "group_id");
-      }
-      if ($abstracts_data->component_user) {
-        array_push($default_keys, "user_id");
-      }
-      if ($abstracts_data->component_language) {
-        array_push($default_keys, "language_id");
-      }
-      if ($abstracts_data->component_page) {
-        array_push($default_keys, "page_id");
-      }
-      if ($abstracts_data->component_media) {
-        array_push($default_keys, "media_id");
-      }
-      if ($abstracts_data->component_commerce) {
-        array_push($default_keys, "price");
-        array_push($default_keys, "currency");
-      }
-      foreach($abstracts_data->references as $reference) {
-        array_push($allowed_keys, $reference->key);
-      }
-      return array_merge($allowed_keys, $default_keys);
-    } else {
-      return $allowed_keys;
-    }
+    return $this->callback(__METHOD__, func_get_args(), $result);
   }
 
   function simulate($module_id = null, $override_module = null) {
@@ -1341,13 +1365,14 @@ class Built {
         "*", 
         array("id" => $module_id), 
         null, 
-        true
+        true,
+        false
       );
     }
     if (!empty($module_data)) {
       $references = array();
       $columns = $this->database->columns($module_data->key);
-      $simulate_reference = function($column) {
+      $simulate_reference = function($module_data, $column) {
         $validate_number = null;
         $validate_datetime = null;
         $type = "input-text";
@@ -1364,15 +1389,71 @@ class Built {
           $type = "switch";
         }
         $reference_data = (object) array(
-          "name" => str_replace("_", " ", ucwords($column["COLUMN_NAME"])),
+          "label" => str_replace("_", " ", ucwords($column["COLUMN_NAME"])),
           "key" => $column["COLUMN_NAME"],
           "type" => $type,
+          "module" => $module_data->id,
+          "reference" => "",
           "placeholder" => $column["COLUMN_COMMENT"],
           "help" => "",
+          "require" => "",
+          "readonly" => "",
+          "disable" => "",
+          "hidden" => "",
           "validate_number" => $validate_number,
+          "validate_number_min" => "",
+          "validate_number_max" => "",
+          "validate_decimal" => "",
+          "validate_decimal_min" => "",
+          "validate_decimal_max" => "",
           "validate_datetime" => $validate_datetime,
+          "validate_datetime_min" => "",
+          "validate_datetime_max" => "",
           "validate_string_max" => $column["CHARACTER_MAXIMUM_LENGTH"],
+          "validate_string_min" => "",
+          "validate_password" => "",
+          "validate_password_equal_to" => "",
+          "validate_email" => "",
+          "validate_url" => "",
+          "validate_no_spaces" => "",
+          "validate_no_special_characters" => "",
+          "validate_no_digit" => "",
+          "validate_uppercase_only" => "",
+          "validate_lowercase_only" => "",
+          "validate_unique" => "",
+          "validate_key" => "",
           "default_value" => $column["COLUMN_DEFAULT"],
+          "default_switch" => "",
+          "input_option" => "",
+          "input_option_static_value" => "",
+          "input_option_dynamic_module" => "",
+          "input_option_dynamic_value_key" => "",
+          "input_option_dynamic_label_key" => "",
+          "input_multiple_type" => "",
+          "file_type" => "",
+          "file_lock" => "",
+          "date_format" => "",
+          "color_format" => "",
+          "input_multiple_format" => "",
+          "upload_folder" => "",
+          "image_width" => "",
+          "image_height" => "",
+          "image_width_ratio" => "",
+          "image_height_ratio" => "",
+          "image_quality" => "",
+          "image_thumbnail" => "",
+          "image_thumbnail_aspectratio" => "",
+          "image_thumbnail_quality" => "",
+          "image_thumbnail_width" => "",
+          "image_thumbnail_height" => "",
+          "image_large" => "",
+          "image_large_aspectratio" => "",
+          "image_large_quality" => "",
+          "image_large_width" => "",
+          "image_large_height" => "",
+          "grid_width" => "",
+          "alignment" => "",
+          "active" => false,
           "order" => $column["ORDINAL_POSITION"]
         );
         return $reference_data;
@@ -1386,9 +1467,9 @@ class Built {
       $component_page = false;
       $component_media = false;
       $component_commerce = false;
-      if (count($columns)) {
-        foreach($columns as $column) {
-          array_push($references, $simulate_reference($column));
+      if (!empty($columns)) {
+        foreach ($columns as $column) {
+          array_push($references, $simulate_reference($module_data, $column));
           if (!is_null($column["COLLATION_NAME"])) {
             $database_collation = $column["COLLATION_NAME"];
           } else if ($column["COLUMN_NAME"] == "order") {
@@ -1443,13 +1524,12 @@ class Built {
     $namespace = "\\" . $classes[0] . "\\" . "Callback" . "\\" . $this->class;
     if (class_exists($namespace)) {
       if (method_exists($namespace, $names[1])) {
-        $callback = new $namespace($this->config, $this->session, $this->controls, $this->request);
+        $callback = new $namespace($this->session, $this->controls, $this->identifier);
         try {
           $function_name = $names[1];
           return $callback->$function_name($arguments, $result);
         } catch(Exception $e) {
           throw new Exception($e->getMessage(), $e->getCode());
-          return false;
         }
       } else {
         return $result;

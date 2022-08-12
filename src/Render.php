@@ -1,12 +1,11 @@
 <?php
 namespace Abstracts;
 
+use \Abstracts\Helpers\Initialize;
 use \Abstracts\Helpers\Route;
 use \Abstracts\Helpers\Utilities;
 use \Abstracts\Helpers\Translation;
-use \Abstracts\Helpers\Initialization;
 
-use \Abstracts\User;
 use \Abstracts\Built;
 
 use Exception;
@@ -15,74 +14,80 @@ class Render {
 
   /* core */
   private $config = null;
+  private $session = null;
   
-  function __construct($config) {
-    $this->config = Initialization::config($config);
-    Initialization::headers($this->config);
-    Initialization::load($this->config);
+  function __construct() {
+    Initialize::headers();
+    $initialize = new Initialize();
+    $this->config = $initialize->config;
+    $this->session = $initialize->session;
+    if (empty($this->config)) {
+      $backtrace = Utilities::backtrace();
+      include(__DIR__ . "/Helpers/install/index.php");
+    }
   }
 
   function response() {
-
-    Initialization::response_headers($this->config);
+    if (!empty($this->config)) {
       
-    try {
+      Initialize::response_headers();
       
       $translation = new Translation();
-      
-      $user = new User($this->config);
-      $session = $user->authenticate(null, false);
-      
-      $message = array(
-        400 => $translation->translate("Bad request"),
-        404 => $translation->translate("Not found"),
-        409 => $translation->translate("No response")
-      );
-    
-      $route = new Route($this->config);
-      if ($route->request) {
-        if ($route->request->class && $route->request->function) {
-          $namespace = "\\Abstracts\\" . $route->request->class;
-          $parameters = Utilities::format_request();
-          if (class_exists($namespace)) {
-            if (method_exists($namespace, $route->request->function)) {
-              $class = new $namespace($this->config, $session, null, $route->request->module);
-              $data = $class->request($route->request->function, $parameters);
-              echo Utilities::handle_response($data);
-            } else if (method_exists("\\Abstracts\\Built", $route->request->function)) {
-              $built = new Built($this->config, $session, null, $route->request->module);
-              $data = $built->request($route->request->function, $parameters);
-              echo Utilities::handle_response($data);
+        
+      try {
+        
+        $message = array(
+          400 => $translation->translate("Bad request"),
+          404 => $translation->translate("Endpoint not found"),
+          405 => $translation->translate("Method not found"),
+          409 => $translation->translate("No response")
+        );
+        
+        $request = Route::get_request();
+        if ($request) {
+          if ($request->class && $request->function) {
+            $namespace = "\\Abstracts\\" . $request->class;
+            $parameters = Utilities::handle_request();
+            if (class_exists($namespace)) {
+              if (method_exists($namespace, $request->function)) {
+                $class = new $namespace($this->session, null, $request->module);
+                $data = $class->request($request->function, $parameters);
+                echo Utilities::handle_response($data);
+              } else if (method_exists("\\Abstracts\\Built", $request->function)) {
+                $built = new Built($this->session, null, $request->module);
+                $data = $built->request($request->function, $parameters);
+                echo Utilities::handle_response($data);
+              } else {
+                throw new Exception($message[405], 405);
+              }
             } else {
-              throw new Exception($message[404], 404);
+              if (method_exists("\\Abstracts\\Built", $request->function)) {
+                $built = new Built($this->session, null, $request->module);
+                $data = $built->request($request->function, $parameters);
+                echo Utilities::handle_response($data);
+              } else {
+                throw new Exception($message[405], 405);
+              }
             }
           } else {
-            if (method_exists("\\Abstracts\\Built", $route->request->function)) {
-              $built = new Built($this->config, $session, null, $route->request->module);
-              $data = $built->request($route->request->function, $parameters);
-              echo Utilities::handle_response($data);
-            } else {
-              throw new Exception($message[404], 404);
-            }
+            throw new Exception($message[404], 404);
           }
         } else {
           throw new Exception($message[400], 400);
         }
-      } else {
-        throw new Exception($message[400], 400);
+      
+      } catch(Exception $e) {
+        header($e->getMessage(), true, $e->getCode());
+        echo Utilities::handle_response(
+          array(
+            "status" => false,
+            "code" => $e->getCode(),
+            "message" => $e->getMessage()
+          )
+        );
       }
-    
-    } catch(Exception $e) {
-      header($e->getMessage(), true, $e->getCode());
-      echo Utilities::handle_response(
-        array(
-          "status" => false,
-          "code" => $e->getCode(),
-          "message" => $e->getMessage()
-        )
-      );
+      
     }
-    
   }
 
 }

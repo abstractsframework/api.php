@@ -1,6 +1,7 @@
 <?php
 namespace Abstracts;
 
+use \Abstracts\Helpers\Initialize;
 use \Abstracts\Helpers\Database;
 use \Abstracts\Helpers\Validation;
 use \Abstracts\Helpers\Translation;
@@ -15,32 +16,13 @@ use Exception;
 class User {
 
   /* configuration */
-  private $id = "6";
-  private $public_functions = array(
+  public $id = "6";
+  public $public_functions = array(
 		"verify"
 	);
-  private $allowed_keys = array(
-    "id",
-    "username",
-    "password",
-    "email",
-    "name",
-    "last_name",
-    "nick_name",
-    "image",
-    "phone",
-    "passcode",
-    "email_verified",
-    "phone_verified",
-    "ndid_verified",
-    "face_verified",
-    "date_created",
-    "activate",
-    "user_id"
-  );
+  public $module = null;
 
   /* core */
-  public $module = null;
   private $config = null;
   private $session = null;
   private $controls = null;
@@ -49,7 +31,6 @@ class User {
   private $database = null;
   private $validation = null;
   private $translation = null;
-  private $utilities = null;
   private $encryption = null;
 
   /* services */
@@ -58,63 +39,34 @@ class User {
   private $control = null;
 
   function __construct(
-    $config,
     $session = null,
-    $controls = null,
-    $identifier = null
+    $controls = null
   ) {
 
     /* initialize: core */
-    $this->config = $config;
-    $this->session = $session;
-    $this->module = Utilities::sync_module($config, $identifier);
-    $this->controls = Utilities::sync_control(
-      $this->id, 
-      $session, 
-      $controls,
-      $this->module
-    );
-    
+    $initialize = new Initialize($session, $controls, $this->id);
+    $this->config = $initialize->config;
+    $this->session = $initialize->session;
+    $this->controls = $initialize->controls;
+    $this->module = $initialize->module;
+
     /* initialize: helpers */
-    $this->database = new Database($this->config, $this->session, $this->controls);
-    $this->validation = new Validation($this->config);
+    $this->database = new Database($this->session, $this->controls);
+    $this->validation = new Validation();
     $this->translation = new Translation();
-    $this->utilities = new Utilities();
     $this->encryption = new Encryption();
 
     /* initialize: services */
-    $this->api = new API($this->config, $this->session, 
+    $this->api = new API($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
-    $this->device = new Device($this->config, $this->session, 
+    $this->device = new Device($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
-    $this->control = new Control($this->config, $this->session, 
+    $this->control = new Control($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
 
-    $this->initialize();
-
-  }
-
-  private function initialize() {
-    if (empty($this->module)) {
-      $this->module = $this->database->select(
-        "module", 
-        "*", 
-        array("id" => $this->id), 
-        null, 
-        true
-      );
-    }
-    if (!empty($this->module) && !count($this->allowed_keys)) {
-      $columns = $this->database->columns($this->module->key);
-      if (count($columns)) {
-        foreach($columns as $column) {
-          $this->allowed_keys = array_merge($this->allowed_keys, $column["COLUMN_NAME"]);
-        }
-      }
-    }
   }
 
   function request($function, $parameters) {
@@ -122,86 +74,82 @@ class User {
     if ($this->api->authorize($this->id, $function, $this->public_functions)) {
       if ($function == "login") {
         $result = $this->$function(
-          (isset($parameters["post"]["username"]) ? $parameters["post"]["username"] : null),
-          (isset($parameters["post"]["password"]) ? $parameters["post"]["password"] : null),
-          (isset($parameters["get"]["remember"]) ? $parameters["get"]["remember"] : 
-            (isset($parameters["post"]["remember"]) ? $parameters["post"]["remember"] : null)
+          (isset($parameters["username"]) ? $parameters["username"] : null),
+          (isset($parameters["password"]) ? $parameters["password"] : null),
+          (isset($parameters["remember"]) ? $parameters["remember"] : 
+            (isset($parameters["remember"]) ? $parameters["remember"] : null)
           ),
-          (isset($parameters["post"]["device"]) ? $parameters["post"]["device"] : null)
+          (isset($parameters["device"]) ? $parameters["device"] : null)
         );
       } else if ($function == "authenticate") {
         $result = $this->$function(
-          (isset($parameters["get"]["authorization"]) ? $parameters["get"]["authorization"] : 
-            (isset($parameters["post"]["authorization"]) ? $parameters["post"]["authorization"] : null)
+          (isset($parameters["authorization"]) ? $parameters["authorization"] : 
+            (isset($parameters["authorization"]) ? $parameters["authorization"] : null)
           )
         );
       } else if ($function == "logout") {
         $result = $this->$function(
-          (isset($parameters["get"]["authorization"]) ? $parameters["get"]["authorization"] : 
-            (isset($parameters["post"]["authorization"]) ? $parameters["post"]["authorization"] : null)
+          (isset($parameters["authorization"]) ? $parameters["authorization"] : 
+            (isset($parameters["authorization"]) ? $parameters["authorization"] : null)
           )
         );
       } else if ($function == "signup") {
-        $result = $this->$function($parameters["post"]);
+        $result = $this->$function($parameters);
       } else if ($function == "get") {
         $result = $this->$function(
-          (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
-          (isset($parameters["get"]["activate"]) ? $parameters["get"]["activate"] : null)
+          (isset($parameters["id"]) ? $parameters["id"] : null),
+          (isset($parameters["active"]) ? $parameters["active"] : null),
+          (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
         );
       } else if ($function == "list") {
         $result = $this->$function(
-          (isset($parameters["get"]["start"]) ? $parameters["get"]["start"] : null), 
-          (isset($parameters["get"]["limit"]) ? $parameters["get"]["limit"] : null), 
-          (isset($parameters["get"]["sort_by"]) ? $parameters["get"]["sort_by"] : null), 
-          (isset($parameters["get"]["sort_direction"]) ? $parameters["get"]["sort_direction"] : null), 
-          (isset($parameters["get"]["activate"]) ? $parameters["get"]["activate"] : null), 
-          (isset($parameters["post"]["filters"]) ? $parameters["post"]["filters"] : null), 
-          (isset($parameters["post"]["extensions"]) ? $parameters["post"]["extensions"] : null), 
-          (isset($parameters["get"]["key"]) ? $parameters["get"]["key"] : 
-            (isset($parameters["post"]["key"]) ? $parameters["post"]["key"] : null)
-          ),
-          (isset($parameters["get"]["value"]) ? $parameters["get"]["value"] : 
-            (isset($parameters["post"]["value"]) ? $parameters["post"]["value"] : null)
-          )
+          (isset($parameters["start"]) ? $parameters["start"] : null), 
+          (isset($parameters["limit"]) ? $parameters["limit"] : null), 
+          (isset($parameters["sort_by"]) ? $parameters["sort_by"] : null), 
+          (isset($parameters["sort_direction"]) ? $parameters["sort_direction"] : null), 
+          (isset($parameters["active"]) ? $parameters["active"] : null), 
+          (isset($parameters) ? $parameters : null), 
+          (isset($parameters["extensions"]) ? $parameters["extensions"] : null), 
+          (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
         );
       } else if ($function == "count") {
         $result = $this->$function(
-          (isset($parameters["get"]["start"]) ? $parameters["get"]["start"] : null), 
-          (isset($parameters["get"]["limit"]) ? $parameters["get"]["limit"] : null), 
-          (isset($parameters["get"]["activate"]) ? $parameters["get"]["activate"] : null), 
-          (isset($parameters["post"]["filters"]) ? $parameters["post"]["filters"] : null), 
-          (isset($parameters["post"]["extensions"]) ? $parameters["post"]["extensions"] : null)
+          (isset($parameters["start"]) ? $parameters["start"] : null), 
+          (isset($parameters["limit"]) ? $parameters["limit"] : null), 
+          (isset($parameters["active"]) ? $parameters["active"] : null), 
+          (isset($parameters) ? $parameters : null), 
+          (isset($parameters["extensions"]) ? $parameters["extensions"] : null)
         );
       } else if ($function == "create") {
-        $result = $this->$function($parameters["post"]);
+        $result = $this->$function($parameters);
       } else if ($function == "update") {
         $result = $this->$function(
-          (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
-          (isset($parameters["put"]["parameters"]) ? $parameters["put"]["parameters"] : null)
+          (isset($parameters["id"]) ? $parameters["id"] : null),
+          (isset($parameters) ? $parameters : null)
         );
       } else if ($function == "delete") {
         $result = $this->$function(
-          (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null)
+          (isset($parameters["id"]) ? $parameters["id"] : null)
         );
       } else if ($function == "patch") {
         $result = $this->$function(
-          (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
-          (isset($parameters["patch"]) ? $parameters["patch"] : null)
+          (isset($parameters["id"]) ? $parameters["id"] : null),
+          (isset($parameters) ? $parameters : null)
         );
       } else if ($function == "upload") {
         $result = $this->$function(
-          (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
+          (isset($parameters["id"]) ? $parameters["id"] : null),
           $_FILES
         );
-      } else if ($function == "remove_file") {
+      } else if ($function == "remove") {
         $result = $this->$function(
-          (isset($parameters["get"]["id"]) ? $parameters["get"]["id"] : null),
-          (isset($parameters["patch"]) ? $parameters["patch"] : null)
+          (isset($parameters["id"]) ? $parameters["id"] : null),
+          (isset($parameters) ? $parameters : null)
         );
       } else if ($function == "data") {
         $result = $this->$function(
-          (isset($parameters["get"]["key"]) ? $parameters["get"]["key"] : null),
-          (isset($parameters["get"]["value"]) ? $parameters["get"]["value"] : null)
+          (isset($parameters["key"]) ? $parameters["key"] : null),
+          (isset($parameters["value"]) ? $parameters["value"] : null)
         );
       } else {
         throw new Exception($this->translation->translate("Function not supported"), 421);
@@ -216,19 +164,28 @@ class User {
       !isset($username) || empty($username)
       || !isset($password) || empty($password)
     ) {
-      foreach(Utilities::get_headers_all() as $key => $value) {
-        if (strtolower($key) == "authorization") {
-          if (strpos($value, "Basic") === 0) {
-            $authorization = base64_decode(str_replace("Basic ", "", $value));
-            $authorization_parts = explode(":", $authorization);
-            if (isset($authorization_parts[0])) {
-              $username = $authorization_parts[0];
-            }
-            if (isset($authorization_parts[1])) {
-              $password = $authorization_parts[1];
+      if (isset($_POST["a"]) && !empty($_POST["a"])) {
+        $authorization = $_POST["a"];
+      } else if (isset($_REQUEST["a"]) && !empty($_REQUEST["a"])) {
+        $authorization = $_REQUEST["a"];
+      } else {
+        foreach (Utilities::get_all_headers() as $key => $value) {
+          if (strtolower($key) == "authorization") {
+            if (strpos($value, "Basic") === 0) {
+              $authorization = base64_decode(str_replace("Basic ", "", $value));
             }
           }
         }
+      }
+    }
+
+    if (!empty($authorization)) {
+      $authorization_parts = explode(":", $authorization);
+      if (isset($authorization_parts[0])) {
+        $username = $authorization_parts[0];
+      }
+      if (isset($authorization_parts[1])) {
+        $password = $authorization_parts[1];
       }
     }
 
@@ -239,19 +196,19 @@ class User {
 
       $password_hash = hash("sha256", md5($password . $this->config["password_salt"]));
       $filters = array(
-        "activate" => true,
+        "active" => true,
         "password" => $password_hash
       );
       $extensions = array(
         array(
           "conjunction" => "",
-          "key" => "`username`",
+          "key" => "username",
           "operator" => "=",
           "value" => "'" . $username . "'",
         ),
         array(
           "conjunction" => "OR",
-          "key" => "`email`",
+          "key" => "email",
           "operator" => "=",
           "value" => "'" . $username . "'",
         )
@@ -262,11 +219,11 @@ class User {
         $filters, 
         $extensions, 
         true,
-        $this->allowed_keys
+        false
       );
       if (!empty($data)) {
 
-        $result = function($data, $session_id, $date_recent, $date_expire) {
+        $result = function($data, $session_id, $update_at, $expire_at, $function) {
           if (
             isset($this->config["encrypt_authorization"]) 
             && !empty($this->config["encrypt_authorization"])
@@ -275,8 +232,8 @@ class User {
             $values = array(
               "session_id" => $session_id,
               "id" => $data->id,
-              "iss" => strtotime($date_recent),
-              "exp" => strtotime($date_expire)
+              "iss" => strtotime($update_at),
+              "exp" => strtotime($expire_at)
             );
   
             try {
@@ -287,27 +244,25 @@ class User {
               );
               if ($token !== false) {
                 $data->token = $token;
-                return $this->callback(__METHOD__, func_get_args(), $data);
+                return $this->callback($function, func_get_args(), $data);
               } else {
                 throw new Exception($this->translation->translate("Invalid authorization"), 403);
-                return null;
               }
             } catch(Exception $e) {
               throw new Exception($e->getMessage(), 500);
-              return null;
             }
             
           } else {
             $data->token = base64_encode($data->id . "." . $session_id);
-            return $this->callback(__METHOD__, func_get_args(), $data);
+            return $this->callback($function, func_get_args(), $data);
           }
         };
 
-        $data = $this->format($data);
+        $data = $this->format($data, false, true);
 
         $session_id = session_id();
-        $date_recent = gmdate("Y-m-d H:i:s");
-        $date_expire = gmdate("Y-m-d H:i:s", strtotime($this->config["session_duration"]));
+        $update_at = gmdate("Y-m-d H:i:s");
+        $expire_at = gmdate("Y-m-d H:i:s", strtotime($this->config["session_duration"]));
         
         if (isset($remember) && (!empty($remember))) {
           if (!$this->update_device($data->id, $session_id)) {
@@ -333,32 +288,32 @@ class User {
               "app_version" => ((isset($device) && isset($device["app_version"])) ? $device["app_version"] : ""),
               "app_build" => ((isset($device) && isset($device["app_build"])) ? $device["app_build"] : ""),
               "ip_recent" => $_SERVER["REMOTE_ADDR"],
-              "date_recent" => $date_recent,
-              "date_expire" => $date_expire,
-              "activate" => true,
+              "update_at" => $update_at,
+              "expire_at" => $expire_at,
+              "active" => true,
               "user_id" => $data->id
             );
             if (
               $this->database->insert(
                 "device", 
                 $device_parameters, 
-                true
+                true,
+                false
               )
             ) {
-              return $result($data, $session_id, $date_recent, $date_expire);
+              return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
             } else {
               return null;
             }
           } else {
-            return $result($data, $session_id, $date_recent, $date_expire);
+            return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
           }
         } else {
-          return $result($data, $session_id, $date_recent, $date_expire);
+          return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
         }
 
       } else {
         throw new Exception($this->translation->translate("Invalid account"), 401);
-        return null;
       }
     } else {
       return null;
@@ -372,14 +327,15 @@ class User {
     $message = $this->translation->translate("Invalid authorization");
 
     if (empty($authorization)) {
-      if (isset($_POST["authorization"]) && !empty($_POST["authorization"])) {
-        $authorization = $_POST["authorization"];
-      } else if (isset($_GET["authorization"]) && !empty($_GET["authorization"])) {
-        $authorization = $_GET["authorization"];
-      }
-      foreach(Utilities::get_headers_all() as $key => $value) {
-        if (strtolower($key) == "authorization") {
-          $authorization= $value;
+      if (isset($_POST["a"]) && !empty($_POST["a"])) {
+        $authorization = $_POST["a"];
+      } else if (isset($_REQUEST["a"]) && !empty($_REQUEST["a"])) {
+        $authorization = $_REQUEST["a"];
+      } else {
+        foreach (Utilities::get_all_headers() as $key => $value) {
+          if (strtolower($key) == "authorization") {
+            $authorization= $value;
+          }
         }
       }
     }
@@ -449,7 +405,8 @@ class User {
             "device", 
             $filters, 
             null, 
-            true
+            true,
+            false
           )
         ) {
           $result = true;
@@ -470,14 +427,15 @@ class User {
     $message = $this->translation->translate("Invalid authorization");
 
     if (empty($authorization)) {
-      if (isset($_POST["authorization"]) && !empty($_POST["authorization"])) {
-        $authorization = $_POST["authorization"];
-      } else if (isset($_GET["authorization"]) && !empty($_GET["authorization"])) {
-        $authorization = $_GET["authorization"];
-      }
-      foreach(Utilities::get_headers_all() as $key => $value) {
-        if (strtolower($key) == "authorization") {
-          $authorization= $value;
+      if (isset($_POST["a"]) && !empty($_POST["a"])) {
+        $authorization = $_POST["a"];
+      } else if (isset($_REQUEST["a"]) && !empty($_REQUEST["a"])) {
+        $authorization = $_REQUEST["a"];
+      } else {
+        foreach (Utilities::get_all_headers() as $key => $value) {
+          if (strtolower($key) == "authorization") {
+            $authorization= $value;
+          }
         }
       }
     }
@@ -558,12 +516,12 @@ class User {
           array("id" => $user_id), 
           null, 
           true,
-          $this->allowed_keys
+          false
         );
         if (!empty($data)) {
           if ($this->update_device($data->id, $session_id)) {
             $data->session_id = $session_id;
-            $session = $this->format($data);
+            $session = $this->format($data, false, true);
           }
         }
       } else {
@@ -584,11 +542,7 @@ class User {
   function signup($parameters, $user_id = 0) {
       
     /* initialize: parameters */
-    $parameters = $this->inform($parameters);
-    $parameters["id"] = (isset($parameters["id"]) ? $parameters["id"] : null);
-    $parameters["activate"] = (isset($parameters["activate"]) ? $parameters["activate"] : true);
-    $parameters["user_id"] = (!empty($user_id) ? $user_id : (!empty($this->session) ? $this->session->id : 0));
-    $parameters["date_created"] = gmdate("Y-m-d H:i:s");
+    $parameters = $this->inform($parameters, false, $user_id);
     if (!isset($parameters["username"])) {
       $parameters["username"] = $this->random_username();
     }
@@ -606,8 +560,7 @@ class User {
         $data = $this->database->insert(
           "user", 
           $parameters, 
-          true,
-          $this->allowed_keys
+          true
         )
       ) {
         if (
@@ -617,7 +570,7 @@ class User {
             array("id" => $data->id),
             null,
             true,
-            $this->allowed_keys
+            false
           )
         ) {
           $data = $data_update[0];
@@ -627,36 +580,38 @@ class User {
               array("id", "controls"), 
               array("id" => $this->config["signup_default_group"]), 
               null, 
-              true
+              true,
+              false
             );
             if (!empty($group_data)) {
               $member_parameters = array(
                 "id" => null,
                 "user" => $data->id,
                 "group_id" => $group_data->id,
-                "date_created" => $parameters["date_created"],
-                "activate" => true,
+                "create_at" => $parameters["create_at"],
+                "active" => true,
                 "user_id" => $data->id
               );
               if (
                 $this->database->insert(
                   "member", 
                   $member_parameters, 
-                  true
+                  true,
+                  false
                 )
               ) {
                 $controls = unserialize($group_data->controls);
-                if (is_array($controls) && count($controls)) {
+                if (is_array($controls) && !empty($controls)) {
                   $controls_parameters = array();
-                  foreach($controls as $value) {
+                  foreach ($controls as $controls_value) {
                     array_push($controls_parameters, array(
                       "id" => null,
                       "user" => $data->id,
-                      "rules" => $value["rules"],
-                      "behaviors" => $value["behaviors"],
-                      "date_created" => $parameters["date_created"],
-                      "activate" => true,
-                      "module_id" => $value["module_id"],
+                      "rules" => $controls_value["rules"],
+                      "behaviors" => $controls_value["behaviors"],
+                      "create_at" => $parameters["create_at"],
+                      "active" => true,
+                      "module_id" => $controls_value["module_id"],
                       "group_id" => $group_data->id,
                       "user_id" => $data->id
                     ));
@@ -665,28 +620,30 @@ class User {
                     $this->database->insert_multiple(
                       "control", 
                       $controls_parameters, 
-                      true
+                      true,
+                      false
                     )
                   ) {
-                    return $this->callback(__METHOD__, func_get_args(), $data);
+                    return $this->callback(__METHOD__, func_get_args(), $this->format($data, false, true));
                   } else {
                     $this->database->delete(
                       "user", 
                       array("id" => $data->id), 
                       null, 
                       true,
-                      $this->allowed_keys
+                      false
                     );
                     $this->database->delete(
                       "member", 
                       array("user" => $data->id), 
                       null, 
-                      true
+                      true,
+                      false
                     );
                     return false;
                   }
                 } else {
-                  return $this->callback(__METHOD__, func_get_args(), $data);
+                  return $this->callback(__METHOD__, func_get_args(), $this->format($data, false, true));
                 }
               } else {
                 $this->database->delete(
@@ -694,7 +651,7 @@ class User {
                   array("id" => $data->id), 
                   null, 
                   true,
-                  $this->allowed_keys
+                  false
                 );
                 return false;
               }
@@ -703,19 +660,21 @@ class User {
                 "user", 
                 array("id" => $data->id), 
                 null, 
-                true
+                true,
+                false
               );
               return false;
             }
           } else {
-            return $this->callback(__METHOD__, func_get_args(), $data);
+            return $this->callback(__METHOD__, func_get_args(), $this->format($data, false, true));
           }
         } else {
           $this->database->delete(
             "user", 
             array("id" => $data->id), 
             null, 
-            true
+            true,
+            false
           );
           return false;
         }
@@ -728,27 +687,26 @@ class User {
     }
   }
 
-  function get($id, $activate = null) {
+  function get($id, $active = null, $return_references = false) {
     if ($this->validation->require($id, "ID")) {
 
-      $activate = !empty($activate) ? $activate : null;
+      $active = Initialize::active($active);
+      $return_references = Initialize::return_references($return_references);
 
       $filters = array("id" => $id);
-      if ($activate) {
-        $filters["activate"] = "1";
+      if (isset($active)) {
+        $filters["active"] = $active;
       }
       $data = $this->database->select(
         "user", 
         "*", 
         $filters, 
         null, 
-        true,
-        $this->allowed_keys
+        $this->controls["view"]
       );
       if (!empty($data)) {
-        return $this->callback(__METHOD__, func_get_args(), $this->format($data));
+        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
       } else {
-        throw new Exception($this->translation->translate("Not found"), 404);
         return null;
       }
 
@@ -762,47 +720,43 @@ class User {
     $limit = null, 
     $sort_by = "id", 
     $sort_direction = "desc", 
-    $activate = null, 
+    $active = null, 
     $filters = array(), 
     $extensions = array(),
-    $key = null, 
-    $value = null
+    $return_references = false
   ) {
 
-    $start = !empty($start) ? $start : null;
-    $limit = !empty($limit) ? $limit : null;
-    $sort_by = !empty($sort_by) ? $sort_by : "id";
-    $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
-    $activate = !empty($activate) ? $activate : null;
-    $filters = is_array($filters) ? $filters : array();
-    $extensions = is_array($extensions) ? $extensions : array();
+    $start = Initialize::start($start);
+    $limit = Initialize::limit($limit);
+    $sort_by = Initialize::sort_by($sort_by);
+    $sort_direction = Initialize::sort_direction($sort_direction);
+    $active = Initialize::active($active);
+    $filters = Initialize::filters($filters);
+    $extensions = Initialize::extensions($extensions);
+    $return_references = Initialize::return_references($return_references);
     
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
-      if (!empty($activate)) {
-        array_push($filters, array("activate" => true));
-      }
-      if (!empty($key) && !empty($value)) {
-        $filters[$key] = $value;
+      if (isset($active)) {
+        $filters["active"] = $active;
       }
       $list = $this->database->select_multiple(
         "user", 
         "*", 
         $filters, 
-        $start, 
         $extensions, 
+        $start, 
         $limit, 
         $sort_by, 
         $sort_direction, 
-        $this->controls["view"],
-        $this->allowed_keys
+        $this->controls["view"]
       );
       if (!empty($list)) {
         $data = array();
-        foreach($list as $value) {
-          array_push($data, $this->format($value));
+        foreach ($list as $value) {
+          array_push($data, $this->format($value, $return_references));
         }
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
@@ -816,37 +770,32 @@ class User {
   function count(
     $start = null, 
     $limit = null, 
-    $activate = null, 
+    $active = null, 
     $filters = array(), 
     $extensions = array()
   ) {
 
-    $start = !empty($start) ? $start : null;
-    $limit = !empty($limit) ? $limit : null;
-    $activate = !empty($activate) ? $activate : null;
-    $filters = is_array($filters) ? $filters : array();
-    $extensions = is_array($extensions) ? $extensions : array();
+    $start = Initialize::start($start);
+    $limit = Initialize::limit($limit);
+    $active = Initialize::active($active);
+    $filters = Initialize::filters($filters);
+    $extensions = Initialize::extensions($extensions);
 
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
-      if (!empty($activate)) {
-        array_push($filters, array("activate" => true));
-      }
-      if (!empty($key) && !empty($value)) {
-        $filters[$key] = $value;
+      if (isset($active)) {
+        $filters["active"] = $active;
       }
       if (
         $data = $this->database->count(
           "user", 
-          "*", 
           $filters, 
-          $start, 
           $extensions, 
+          $start, 
           $limit, 
-          $this->controls["view"],
-          $this->allowed_keys
+          $this->controls["view"]
         )
       ) {
         return $data;
@@ -861,11 +810,7 @@ class User {
   function create($parameters, $user_id = 0) {
       
     /* initialize: parameters */
-    $parameters = $this->inform($parameters);
-    $parameters["id"] = (isset($parameters["id"]) ? $parameters["id"] : null);
-    $parameters["activate"] = (isset($parameters["activate"]) ? $parameters["activate"] : true);
-    $parameters["user_id"] = (!empty($user_id) ? $user_id : (!empty($this->session) ? $this->session->id : 0));
-    $parameters["date_created"] = gmdate("Y-m-d H:i:s");
+    $parameters = $this->inform($parameters, false, $user_id);
 
     if ($this->validate($parameters)) {
     
@@ -876,18 +821,23 @@ class User {
       $parameters["ndid_verified"] = 0;
       $parameters["face_verified"] = 0;
 
-      return $this->callback(
-        __METHOD__, 
-        func_get_args(), 
-        $this->format(
-          $this->database->insert(
-            "user", 
-            $parameters, 
-            $this->controls["create"],
-            $this->allowed_keys
-          )
-        )
+      $data = $this->database->insert(
+        "user", 
+        $parameters, 
+        $this->controls["create"]
       );
+      if (!empty($data)) {
+        if (!empty($_FILES)) {
+          // $this->upload($data->id, $_FILES);
+        }
+        return $this->callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data)
+        );
+      } else {
+        return $data;
+      }
 
     } else {
       return null;
@@ -898,23 +848,29 @@ class User {
   function update($id, $parameters) {
 
     /* initialize: parameters */
-    $parameters = $this->inform($parameters, $id);
+    $parameters = $this->inform($parameters, true);
 
     if ($this->validate($parameters, $id)) {
-      return $this->callback(
-        __METHOD__, 
-        func_get_args(), 
-        $this->format(
-          $this->database->update(
-            "user", 
-            $parameters, 
-            array("id" => $id), 
-            null, 
-            $this->controls["update"],
-            $this->allowed_keys
-          )
-        )
+      $data = $this->database->update(
+        "user", 
+        $parameters, 
+        array("id" => $id), 
+        null, 
+        $this->controls["update"]
       );
+      if (!empty($data)) {
+        $data = $data[0];
+        if (!empty($_FILES)) {
+          // $this->upload($data->id, $_FILES);
+        }
+        return $this->callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data)
+        );
+      } else {
+        return $data;
+      }
     } else {
       return null;
     }
@@ -924,25 +880,31 @@ class User {
   function patch($id, $parameters) {
 
     /* initialize: parameters */
-    $parameters = $this->inform($parameters, $id);
+    $parameters = $this->inform($parameters, true);
     
     if ($this->validation->require($id, "ID")) {
 
       if ($this->validate($parameters, $id, true)) {
-        return $this->callback(
-          __METHOD__, 
-          func_get_args(), 
-          $this->format(
-            $this->database->update(
-              "user", 
-              $parameters, 
-              array("id" => $id), 
-              null, 
-              $this->controls["update"],
-              $this->allowed_keys
-            )
-          )
+        $data = $this->database->update(
+          "user", 
+          $parameters, 
+          array("id" => $id), 
+          null, 
+          $this->controls["update"]
         );
+        if (!empty($data)) {
+          $data = $data[0];
+          if (!empty($_FILES)) {
+            // $this->upload($data->id, $_FILES);
+          }
+          return $this->callback(
+            __METHOD__, 
+            func_get_args(), 
+            $this->format($data)
+          );
+        } else {
+          return $data;
+        }
       } else {
         return null;
       }
@@ -956,31 +918,24 @@ class User {
   function delete($id) {
     if ($this->validation->require($id, "ID")) {
       if (
-        $data = $this->format(
-          $this->database->delete(
-            "user", 
-            array("id" => $id), 
-            null, 
-            $this->controls["delete"],
-            $this->allowed_keys
-          )
+        $data = $this->database->delete(
+          "user", 
+          array("id" => $id), 
+          null, 
+          $this->controls["delete"]
         )
       ) {
-
-        foreach($data as $value) {
-          $file_old = ".." . $value->image;
-          if (!empty($value->image) && file_exists($file_old)) {
-            chmod($file_old, 0777);
-            unlink($file_old);
-          }
+        $data = $data[0];
+        $file_old = Utilities::backtrace() . trim($data->image, "/");
+        if (!empty($data->image) && file_exists($file_old)) {
+          chmod($file_old, 0777);
+          unlink($file_old);
         }
-
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
-          $data
+          $this->format($data)
         );
-
       } else {
         return null;
       }
@@ -989,36 +944,51 @@ class User {
     }
   }
 
-  function inform($parameters, $target_id = null) {
+  function inform($parameters, $update = false, $user_id = 0) {
     if (!empty($parameters)) {
-      if (isset($parameters["password"]) && !empty($target_id)) {
+      if (!$update) {
+        if (isset($parameters["id"])) {
+          $parameters["id"] = $parameters["id"];
+        } else {
+          $parameters["id"] = null;
+        }
+        $parameters["active"] = (isset($parameters["active"]) ? $parameters["active"] : true);
+        $parameters["user_id"] = (!empty($user_id) ? $user_id : (!empty($this->session) ? $this->session->id : 0));
+        $parameters["create_at"] = gmdate("Y-m-d H:i:s");
+      } else {
+        unset($parameters["id"]);
+        unset($parameters["create_at"]);
+      }
+      if (isset($parameters["password"]) && !empty($update)) {
         unset($parameters["password"]);
       }
       if (isset($parameters["image"])) {
         unset($parameters["image"]);
-        $parameters["image"] = "";
+        if (!empty($update)) {
+          $parameters["image"] = "";
+        }
       }
       if (isset($parameters["email_verified"])) {
         unset($parameters["email_verified"]);
-        if (empty($target_id)) {
+        if (empty($update)) {
           $parameters["email_verified"] = 0;
         }
       }
       if (isset($parameters["phone_verified"])) {
         unset($parameters["phone_verified"]);
-        if (empty($target_id)) {
+        if (empty($update)) {
           $parameters["phone_verified"] = 0;
         }
       }
       if (isset($parameters["ndid_verified"])) {
         unset($parameters["ndid_verified"]);
-        if (empty($target_id)) {
+        if (empty($update)) {
           $parameters["ndid_verified"] = 0;
         }
       }
       if (isset($parameters["face_verified"])) {
         unset($parameters["face_verified"]);
-        if (empty($target_id)) {
+        if (empty($update)) {
           $parameters["face_verified"] = 0;
         }
       }
@@ -1026,115 +996,103 @@ class User {
     return $parameters;
   }
 
-  function format($data, $prevent_data = false) {
+  function format($data, $return_references = false, $return_authoritiy = false) {
 
     if (!empty($data)) {
-      
-      if (!$prevent_data) {
-        $data->user_id_data = $this->data(null, "user_id", $data);
+
+      if ($data->active === "1") {
+        $data->active = true;
+      } else if ($data->active === "0" || empty($data->active)) {
+        $data->active = false;
       }
 
-      if (!$prevent_data) {
-        $data->password_set = false;
-        if (!empty($data->password)) {
-          $data->password_set = true;
-        }
-      }
-      unset($data->password);
-
-      if (!$prevent_data) {
-        $data->passcode_set = false;
-        if (!empty($data->passcode)) {
-          $data->passcode_set = true;
-        }
-      }
-      unset($data->passcode);
-      
-      if (isset($data->image) && !empty($data->image)) {
-        $data->image_path = (object) array(
-          "name" => basename($data->image),
-          "original" => $data->image,
-          "thumbnail" => null,
-          "large" => null
+      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        $data->user_id_reference = $this->format(
+          $this->database->get_reference(
+            $data->user_id, 
+            "user", 
+            "id"
+          ),
+          true
         );
-        $data->image = $data->image_path->name;
-        $data->image_path->original = $data->image;
-        if (strpos($data->image, "http://") !== 0 || strpos($data->image, "https://") !== 0) {
-          $data->image_path->original = $this->config->base_url . $data->image;
-        }
-        $data->image_path->thumbnail = Utilities::get_thumbnail($data->image_path->original);
-        $data->image_path->large = Utilities::get_large($data->image_path->original);
       }
   
-      $arrange_controls = function($controls = array()) {
-        $data = array();
-        if (!empty($controls) && is_array($controls)) {
-          foreach($controls as $value) {
-            $value = (array) $value;
-            if (isset($data[$value["module_id"]])) {
-              $data[$value["module_id"]] = array_merge(
-                $data[$value["module_id"]],
-                $this->control->arrange((object) $value)
-              );
-            } else {
-              $data[$value["module_id"]] = $this->control->arrange((object) $value);
+      if ($return_authoritiy) {
+        $arrange_controls = function($controls = array()) {
+          $data = array();
+          if (!empty($controls) && is_array($controls)) {
+            foreach ($controls as $controls_value) {
+              $value = (array) $controls_value;
+              if (isset($data[$value["module_id"]])) {
+                $data[$value["module_id"]] = array_merge(
+                  $data[$value["module_id"]],
+                  $this->control->arrange((object) $value)
+                );
+              } else {
+                $data[$value["module_id"]] = $this->control->arrange((object) $value);
+              }
             }
           }
-        }
-        return $data;
-      };
-
-      if (!$prevent_data) {
-        $member_data = $this->database->select_multiple(
+          return $data;
+        };
+        $member_list = $this->database->select_multiple(
           "member", 
           "*", 
           array("user" => $data->id), 
           null, 
           null, 
           null, 
-          null, 
-          null, 
-          true
+          "id", 
+          "asc", 
+          true,
+          false
         );
-        if (!empty($member_data)) {
-          for ($i = 0; $i < count($member_data); $i++) {
+        if (!empty($member_list)) {
+          for ($i = 0; $i < count($member_list); $i++) {
+            if ($member_list[$i]->active === "1") {
+              $member_list[$i]->active = true;
+            } else if ($member_list[$i]->active === "0" || empty($member_list[$i]->active)) {
+              $member_list[$i]->active = false;
+            }
             $group_data = $this->database->select(
               "group", 
               "*", 
-              array("id" => $member_data[$i]->group_id), 
+              array("id" => $member_list[$i]->group_id), 
               null, 
-              true
+              true,
+              false
             );
             if (!empty($group_data)) {
               if (isset($group_data->controls) && !empty($group_data->controls)) {
                 $group_data->controls = $arrange_controls(unserialize($group_data->controls));
-                $member_data[$i]->group_id_data = $group_data;
+                $member_list[$i]->group_id_data = $group_data;
               }
             }
           }
         }
-        $data->members = $member_data;
+        $data->members = $member_list;
     
         $controls = array();
-        $control_data = $this->database->select_multiple(
+        $control_list = $this->database->select_multiple(
           "control", 
           "*", 
           array("user" => $data->id), 
           null, 
           null, 
           null, 
-          null, 
-          null, 
-          true
+          "module_id", 
+          "asc", 
+          true,
+          false
         );
-        if (!empty($control_data)) {
-          $controls = $arrange_controls($control_data);
+        if (!empty($control_list)) {
+          $controls = $arrange_controls($control_list);
         }
         if ($data->members) {
-          for ($i = 0; $i < count($member_data); $i++) {
-            if ($member_data[$i]->group_id_data && $member_data[$i]->group_id_data->controls) {
-              $data->controls = array_merge($controls, $member_data[$i]->group_id_data->controls);
-              unset($member_data[$i]->group_id_data->controls);
+          for ($i = 0; $i < count($member_list); $i++) {
+            if ($member_list[$i]->group_id_data && $member_list[$i]->group_id_data->controls) {
+              $data->controls = array_merge($controls, $member_list[$i]->group_id_data->controls);
+              unset($member_list[$i]->group_id_data->controls);
             }
           }
         } else {
@@ -1143,125 +1101,71 @@ class User {
         $data->controls = $controls;
       }
 
+      $data->password_set = false;
+      if (!empty($data->password)) {
+        $data->password_set = true;
+      }
+      unset($data->password);
+
+      $data->passcode_set = false;
+      if (!empty($data->passcode)) {
+        $data->passcode_set = true;
+      }
+      unset($data->passcode);
+      
+      if (isset($data->image) && !empty($data->image)) {
+        $data->image_reference = (object) array(
+          "id" => $data->image,
+          "name" => basename($data->image),
+          "original" => $data->image,
+          "thumbnail" => null,
+          "large" => null
+        );
+        $data->image_reference->original = $data->image;
+        if (strpos($data->image, "http://") !== 0 || strpos($data->image, "https://") !== 0) {
+          $data->image_reference->original = $this->config["base_url"] . $data->image;
+        }
+        $data->image_reference->thumbnail = Utilities::get_thumbnail($data->image_reference->original);
+        $data->image_reference->large = Utilities::get_large($data->image_reference->original);
+      }
+
     }
 
 		return $data;
 
   }
 
-  function data($id = null, $key, $data_override = null) {
-    if ($this->validation->require($key, "Key")) {
-      if (empty($data_override)) {
-        if ($this->validation->require($id, "ID")  && $this->validation->require($key, "Key")) {
-          $filters = array("id" => $id);
-          $data_override = $this->database->select(
-            ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
-            array("`" . $key . "`"), 
-            $filters, 
-            null, 
-            true
-          );
-        } else {
-          return null;
-        }
-      }
-      if (!empty($data_override) && isset($data_override->$key)) {
-        $result = null;
-        $get_key_data = function($table, $table_key, $value) {
-          if (
-            $value = $this->database->select(
-              $table, 
-              "*", 
-              array($table_key => $value), 
-              null, 
-              true
-            )
-          ) {
-            return $value;
-          } else {
-            return $value;
-          }
-        };
-        if ($key == "user_id") {
-
-          $data = $get_key_data("user", "id", $data_override->$key);
-          if (!empty($data)) {
-
-            $data->password_set = false;
-            if (!empty($data->password)) {
-              $data->password_set = true;
-            }
-            unset($data->password);
-      
-            $data->passcode_set = false;
-            if (!empty($data->passcode)) {
-              $data->passcode_set = true;
-            }
-            unset($data->passcode);
-            
-            if (isset($data->image) && !empty($data->image)) {
-              $data->image_path = (object) array(
-                "name" => basename($data->image),
-                "original" => $data->image,
-                "thumbnail" => null,
-                "large" => null
-              );
-              $data->image = $data->image_path->name;
-              $data->image_path->original = $data->image;
-              if (strpos($data->image, "http://") !== 0 || strpos($data->image, "https://") !== 0) {
-                $data->image_path->original = $this->config->base_url . $data->image;
-              }
-              $data->image_path->thumbnail = Utilities::get_thumbnail($data->image_path->original);
-              $data->image_path->large = Utilities::get_large($data->image_path->original);
-            }
-
-            $result = $data;
-      
-          }
-        }
-        return $this->callback(__METHOD__, func_get_args(), $result);
-      } else {
-        throw new Exception($this->translation->translate("Not found"), 404);
-        return null;
-      }
-    } else {
-      return null;
-    }
-  }
-
   function validate($parameters, $target_id = null, $patch = false) {
     $result = false;
     if (!empty($parameters)) {
       if (
-        (
-          $this->validation->set($parameters, "username")
-          && ($this->validation->set($parameters, "password") || !empty($target_id))
-          && ($this->validation->set($parameters, "confirm_password") || !empty($target_id))
-          && $this->validation->set($parameters, "email")
-          && $this->validation->set($parameters, "name")
-          && $this->validation->set($parameters, "last_name")
-          && $this->validation->set($parameters, "nick_name")
-          && $this->validation->set($parameters, "phone")
-          && ($this->validation->set($parameters, "passcode") || !empty($target_id))
-        ) || $patch
+        $this->validation->set($parameters, "username", $patch)
+        && $this->validation->set($parameters, "password", ($patch || !empty($target_id)))
+        && $this->validation->set($parameters, "confirm_password", ($patch || !empty($target_id)))
+        && $this->validation->set($parameters, "email", $patch)
+        && $this->validation->set($parameters, "name", $patch)
+        && $this->validation->set($parameters, "last_name", $patch)
+        && $this->validation->set($parameters, "nick_name", $patch)
+        && $this->validation->set($parameters, "phone", $patch)
+        && $this->validation->set($parameters, "passcode", ($patch || !empty($target_id)))
       ) {
         if (
-          $this->validation->require($parameters["username"], "Username")
-          && $this->validation->string_min($parameters["username"], "Username", 3)
-          && $this->validation->string_max($parameters["username"], "Username", 100)
-          && $this->validation->no_special_characters($parameters["username"], "Username")
-          && $this->validation->unique($parameters["username"], "Username", "username", "user", $target_id)
-          && $this->validation->require($parameters["password"], "Password")
-          && $this->validation->string_min($parameters["password"], "Password", 8)
-          && $this->validation->string_max($parameters["password"], "Password", 100)
-          && $this->validation->password($parameters["password"], "password")
-          && $this->validation->password_equal_to($parameters["password"], "password", $parameters["confirm_password"])
-          && $this->validation->number($parameters["passcode"], "passcode")
-          && $this->validation->string_max($parameters["name"], "Name", 100)
-          && $this->validation->string_max($parameters["last_name"], "Last Name", 100)
-          && $this->validation->string_max($parameters["nick_name"], "Nick Name", 50)
-          && $this->validation->email($parameters["email"], "Email")
-          && $this->validation->unique($parameters["email"], "Email", "email", "user", $target_id)
+          $this->validation->require(isset($parameters["name"]) ? $parameters["username"] : null, "Username", $patch)
+          && $this->validation->string_min(isset($parameters["username"]) ? $parameters["username"] : null, "Username", 3)
+          && $this->validation->string_max(isset($parameters["username"]) ? $parameters["username"] : null, "Username", 100)
+          && $this->validation->no_special_characters(isset($parameters["username"]) ? $parameters["username"] : null, "Username")
+          && $this->validation->unique(isset($parameters["username"]) ? $parameters["username"] : null, "Username", "username", "user", $target_id)
+          && $this->validation->require(isset($parameters["password"]) ? $parameters["password"] : null, "Password", $patch)
+          && $this->validation->string_min(isset($parameters["password"]) ? $parameters["password"] : null, "Password", 8)
+          && $this->validation->string_max(isset($parameters["password"]) ? $parameters["password"] : null, "Password", 100)
+          && $this->validation->password(isset($parameters["password"]) ? $parameters["password"] : null, "password")
+          && $this->validation->password_equal_to(isset($parameters["password"]) ? $parameters["password"] : null, "password", $parameters["confirm_password"])
+          && $this->validation->number(isset($parameters["passcode"]) ? $parameters["passcode"] : null, "passcode")
+          && $this->validation->string_max(isset($parameters["name"]) ? $parameters["name"] : null, "Name", 100)
+          && $this->validation->string_max(isset($parameters["last_name"]) ? $parameters["last_name"] : null, "Last Name", 100)
+          && $this->validation->string_max(isset($parameters["nick_name"]) ? $parameters["nick_name"] : null, "Nick Name", 50)
+          && $this->validation->email(isset($parameters["email"]) ? $parameters["email"] : null, "Email")
+          && $this->validation->unique(isset($parameters["email"]) ? $parameters["email"] : null, "Email", "email", "user", $target_id)
         ) {
           $result = true;
         }
@@ -1277,21 +1181,22 @@ class User {
       "user_id" => $user_id,
       "session" => $session_id
     );
-    if (
+    if (!empty(
       $data = $this->database->select(
         "device", 
         "*", 
         $filters, 
         null, 
-        true
+        true,
+        false
       )
-    ) {
-      $date_recent = gmdate("Y-m-d H:i:s");
-      $date_expire = gmdate("Y-m-d H:i:s", strtotime($this->config["session_duration"]));
+    )) {
+      $update_at = gmdate("Y-m-d H:i:s");
+      $expire_at = gmdate("Y-m-d H:i:s", strtotime($this->config["session_duration"]));
       $parameters = array(
         "ip_recent" => $_SERVER["REMOTE_ADDR"],
-        "date_recent" => $date_recent,
-        "date_expire" => $date_expire
+        "update_at" => $update_at,
+        "expire_at" => $expire_at
       );
       if (
         $this->database->update(
@@ -1299,7 +1204,8 @@ class User {
           $parameters, 
           array("id" => $data->id), 
           null, 
-          true
+          true,
+          false
         )
       ) {
         return true;
@@ -1315,7 +1221,7 @@ class User {
     $seed = str_split("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_");
     shuffle($seed);
     $random = "";
-    foreach(array_rand($seed, 22) as $i) $random .= $seed[$i];
+    foreach (array_rand($seed, 22) as $i) $random .= $seed[$i];
     if ($this->validation->unique($random, "Username", "username", "user")) {
       return $random;
     } else {
@@ -1329,13 +1235,12 @@ class User {
     $namespace = "\\" . $classes[0] . "\\" . "Callback" . "\\" . $classes[1];
     if (class_exists($namespace)) {
       if (method_exists($namespace, $names[1])) {
-        $callback = new $namespace($this->config, $this->session, $this->controls);
+        $callback = new $namespace($this->session, $this->controls, $this->id);
         try {
           $function_name = $names[1];
           return $callback->$function_name($arguments, $result);
         } catch(Exception $e) {
           throw new Exception($e->getMessage(), $e->getCode());
-          return false;
         }
       } else {
         return $result;

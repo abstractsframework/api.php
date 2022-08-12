@@ -11,10 +11,10 @@ use \Abstracts\API;
 
 use Exception;
 
-class Control {
+class Audience {
 
   /* configuration */
-  public $id = "14";
+  public $id = "4";
   public $public_functions = array();
   public $module = null;
 
@@ -72,7 +72,7 @@ class Control {
           (isset($parameters["sort_direction"]) ? $parameters["sort_direction"] : null), 
           (isset($parameters["active"]) ? $parameters["active"] : null), 
           (isset($parameters) ? $parameters : null), 
-          (isset($parameters["extensions"]) ? $parameters["extensions"] : null),
+          (isset($parameters["extensions"]) ? $parameters["extensions"] : null), 
           (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
         );
       } else if ($function == "count") {
@@ -99,6 +99,21 @@ class Control {
           (isset($parameters["id"]) ? $parameters["id"] : null),
           (isset($parameters) ? $parameters : null)
         );
+      } else if ($function == "upload") {
+        $result = $this->$function(
+          (isset($parameters["id"]) ? $parameters["id"] : null),
+          $_FILES
+        );
+      } else if ($function == "remove") {
+        $result = $this->$function(
+          (isset($parameters["id"]) ? $parameters["id"] : null),
+          (isset($parameters) ? $parameters : null)
+        );
+      } else if ($function == "data") {
+        $result = $this->$function(
+          (isset($parameters["key"]) ? $parameters["key"] : null),
+          (isset($parameters["value"]) ? $parameters["value"] : null)
+        );
       } else {
         throw new Exception($this->translation->translate("Function not supported"), 421);
       }
@@ -111,13 +126,13 @@ class Control {
 
       $active = Initialize::active($active);
       $return_references = Initialize::return_references($return_references);
-      
+
       $filters = array("id" => $id);
       if (isset($active)) {
         $filters["active"] = $active;
       }
       $data = $this->database->select(
-        "control", 
+        "audience", 
         "*", 
         $filters, 
         null, 
@@ -128,6 +143,7 @@ class Control {
       } else {
         return null;
       }
+
     } else {
       return null;
     }
@@ -143,7 +159,7 @@ class Control {
     $extensions = array(),
     $return_references = false
   ) {
-    
+
     $start = Initialize::start($start);
     $limit = Initialize::limit($limit);
     $sort_by = Initialize::sort_by($sort_by);
@@ -161,7 +177,7 @@ class Control {
         $filters["active"] = $active;
       }
       $list = $this->database->select_multiple(
-        "control", 
+        "audience", 
         "*", 
         $filters, 
         $extensions, 
@@ -183,34 +199,6 @@ class Control {
     } else {
       return null;
     }
-  }
-
-  function create($parameters, $user_id = 0) {
-      
-    /* initialize: parameters */
-    $parameters = $this->inform($parameters, false, $user_id);
-
-    if ($this->validate($parameters)) {
-
-      $data = $this->database->insert(
-        "control", 
-        $parameters, 
-        $this->controls["create"]
-      );
-      if (!empty($data)) {
-        return $this->callback(
-          __METHOD__, 
-          func_get_args(), 
-          $this->format($data)
-        );
-      } else {
-        return $data;
-      }
-
-    } else {
-      return null;
-    }
-
   }
 
   function count(
@@ -236,7 +224,7 @@ class Control {
       }
       if (
         $data = $this->database->count(
-          "control", 
+          "audience", 
           $filters, 
           $extensions, 
           $start, 
@@ -253,6 +241,34 @@ class Control {
     }
   }
 
+  function create($parameters, $user_id = 0) {
+      
+    /* initialize: parameters */
+    $parameters = $this->inform($parameters, false, $user_id);
+
+    if ($this->validate($parameters)) {
+
+      $data = $this->database->insert(
+        "audience", 
+        $parameters, 
+        $this->controls["create"]
+      );
+      if (!empty($data)) {
+        return $this->callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data)
+        );
+      } else {
+        return $data;
+      }
+
+    } else {
+      return null;
+    }
+
+  }
+
   function update($id, $parameters) {
 
     /* initialize: parameters */
@@ -260,7 +276,7 @@ class Control {
 
     if ($this->validate($parameters, $id)) {
       $data = $this->database->update(
-        "control", 
+        "audience", 
         $parameters, 
         array("id" => $id), 
         null, 
@@ -291,7 +307,7 @@ class Control {
 
       if ($this->validate($parameters, $id, true)) {
         $data = $this->database->update(
-          "control", 
+          "audience", 
           $parameters, 
           array("id" => $id), 
           null, 
@@ -321,7 +337,7 @@ class Control {
     if ($this->validation->require($id, "ID")) {
       if (
         $data = $this->database->delete(
-          "control", 
+          "audience", 
           array("id" => $id), 
           null, 
           $this->controls["delete"]
@@ -356,7 +372,6 @@ class Control {
         unset($parameters["id"]);
         unset($parameters["create_at"]);
       }
-      $parameters["behaviors"] = implode(",", $parameters["behaviors"]);
     }
     return $parameters;
   }
@@ -368,9 +383,8 @@ class Control {
       } else if ($data->active === "0" || empty($data->active)) {
         $data->active = false;
       }
-      $data->behaviors = explode(",", $data->behaviors);
     }
-    return $data;
+		return $data;
   }
 
   function validate($parameters, $target_id = null, $patch = false) {
@@ -379,81 +393,6 @@ class Control {
     } else {
       throw new Exception($this->translation->translate("Bad request"), 400);
     }
-  }
-
-  function arrange($data, $override_module = null) {
-
-    if (!empty($data)) {
-
-      $controls = array(
-        "view" => false,
-        "create" => false,
-        "update" => false,
-        "delete" => false
-      );
-
-      $module_data = $override_module;
-      if (empty($module_data)) {
-        $module_data = $this->database->select(
-          "module", 
-          array("default_controls"), 
-          array("id" => $data->module_id), 
-          null, 
-          true,
-          false
-        );
-      }
-      if (
-        !empty($module_data) 
-        && isset($module_data->default_controls) 
-        && !empty($module_data->default_controls)
-      ) {
-        $behaviors = explode(",", $module_data->default_controls);
-        if (!empty($behaviors)) {
-          foreach ($behaviors as $behavior) {
-            $controls[$behavior] = true;
-          }
-        }
-      }
-
-      if (isset($data->behaviors) && !empty($data->behaviors)) {
-        $behaviors = explode(",", $data->behaviors);
-        if (!empty($behaviors)) {
-          foreach ($behaviors as $behavior) {
-            if ($controls[$behavior] !== true) {
-              if (empty($data->rules)) {
-                $controls[$behavior] = true;
-              } else {
-                $rules = explode(",", $data->rules);
-                for ($i = 0; $i < count($rules); $i++) {
-                  $operator = "";
-                  foreach (Database::$comparisons as $comparison) {
-                    if (strpos(strtolower($rules[$i]), strtolower($comparison)) !== false) {
-                      $operator = $comparison;
-                    }
-                  }
-                  if (!empty($operator)) {
-                    $rule_parts = explode($operator, $rules[$i]);
-                    if (isset($rule_parts[1]) && $rule_parts[1] == "<session>") {
-                      if (isset($this->session) && isset($this->session->id)) {
-                        $rules[$i] = $rule_parts[0] . $operator . str_replace("<session>", $this->session->id, $rule_parts[1]);
-                      }
-                    }
-                  }
-                }
-                $controls[$behavior] = $rules;
-              }
-            }
-          }
-        }
-      }
-
-      return $controls;
-
-    } else {
-      return $data;
-    }
-
   }
 
   function callback($function, $arguments, $result) {

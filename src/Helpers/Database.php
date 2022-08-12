@@ -1,6 +1,7 @@
 <?php
 namespace Abstracts\Helpers;
 
+use \Abstracts\Helpers\Initialize;
 use \Abstracts\Helpers\Translation;
 
 use Exception;
@@ -35,13 +36,13 @@ class Database {
   private $translation = null;
 
   function __construct(
-    $config,
     $session = null,
     $controls = null
   ) {
 
     /* initialize: core */
-    $this->config = $config;
+    $this->config = Initialize::config();
+
     $this->session = $session;
     if (isset($controls) && !empty($controls)) {
       if (isset($controls["view"])) {
@@ -102,55 +103,68 @@ class Database {
     $filters = array(), 
     $extensions = array(),
     $controls_view = false,
-    $allowed_keys = array(),
+    $clean_keys = array(),
     $fetch_type = "assoc"
   ) {
-
+    
     $filters = is_array($filters) ? $filters : array();
     $extensions = is_array($extensions) ? $extensions : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
     $fetch_type = !empty($fetch_type) ? $fetch_type : "assoc";
     $controls_view = !empty($controls_view) ? $controls_view : false;
+    $controls = $this->controls["view"];
+    if ($controls_view || !empty($controls_view) || (is_array($controls_view) && count($controls_view))) {
+      $controls = $controls_view;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (!empty($filters) || !empty($extensions) || !empty($controls)) {
+        if (empty($clean_keys)) {
+          $columns = $this->columns($table);
+          $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        }
+        if (!empty($filters)) {
+          $filters = $this->clean_filters($filters, $clean_keys);
+        }
+        if (!empty($extensions)) {
+          $extensions = $this->clean_extensions($extensions, $clean_keys);
+        }
+        if (!empty($controls)) {
+          $controls = $this->clean_controls($controls, $clean_keys);
+        }
+      }
+    }
     
     $data = null;
     
-    if ($this->controls["view"] || $controls_view) {
-
-      $controls = $this->controls["view"];
-      if ($controls_view || !empty($controls_view) || (is_array($controls_view) && count($controls_view))) {
-        $controls = $controls_view;
-      }
+    if (!empty($controls)) {
 
       $connection = $this->connect();
-      
-      $conditions = $this->condition(
-        $this->escape_string($filters, $connection), 
-        $this->escape_string($extensions, $connection), 
-        $this->escape_string($controls, $connection),
-        $allowed_keys
-      );
-      
-      if (!empty($keys) && is_array($keys) && count($keys)) {
-        $keys = "`" . implode("`, `", $keys) . "`";
-      }
-
-      $sql = "
-      SELECT " . $keys . " 
-      FROM `" . $table . "` 
-      " . $conditions . "
-      LIMIT 1;";
-      $error = false;
       if ($connection) {
-        if ($result = mysqli_query($connection, $sql)) {
+
+        $error = false;
+      
+        $conditions = $this->condition(
+          $this->escape_string($filters, $connection), 
+          $this->escape_string($extensions, $connection), 
+          $this->escape_string($controls, $connection)
+        );
+        
+        if (!empty($keys) && is_array($keys)) {
+          $keys = "`" . implode("`, `", $keys) . "`";
+        }
+
+        $query = "SELECT " . $keys . " FROM `" . $table . "` " . $conditions . " LIMIT 1;";
+        
+        if ($result = mysqli_query($connection, $query)) {
           if ($fetch_type == "assoc") {
-            if ($query = $result->fetch_assoc()) {
-              $data = (object) $query;
+            if ($row = $result->fetch_assoc()) {
+              $data = (object) $row;
             } else {
               $data = null;
             }
           } else {
-            if ($query = $result->fetch_array()) {
-              $data = (object) $query;
+            if ($row = $result->fetch_array()) {
+              $data = (object) $row;
             } else {
               $data = null;
             }
@@ -159,14 +173,15 @@ class Database {
         } else {
           $error = true;
         }
+
         $this->disconnect($connection);
-      } else {
-        $error = true;
-      }
   
-      if ($error) {
-        var_dump($sql);
-        throw new Exception($this->translation->translate("Database encountered error"), 500);
+        if ($error) {
+          throw new Exception($this->translation->translate("Database encountered error"), 409);
+        }
+
+      } else {
+        throw new Exception($this->translation->translate("Unable to connect to database"), 500);
       }
 
     } else {
@@ -187,80 +202,95 @@ class Database {
     $sort_by = null, 
     $sort_direction = null,
     $controls_view = false,
-    $allowed_keys = array(),
+    $clean_keys = array(),
     $fetch_type = "assoc"
   ) {
-
+    
     $start = !empty($start) ? $start : null;
     $limit = !empty($limit) ? $limit : null;
     $sort_by = !empty($sort_by) ? $sort_by : "id";
     $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
-    $activate = !empty($activate) ? $activate : null;
+    $active = !empty($active) ? $active : null;
     $filters = is_array($filters) ? $filters : array();
     $extensions = is_array($extensions) ? $extensions : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
     $fetch_type = !empty($fetch_type) ? $fetch_type : "assoc";
     $controls_view = !empty($controls_view) ? $controls_view : false;
+    $controls = $this->controls["view"];
+    if ($controls_view || !empty($controls_view) || (is_array($controls_view) && count($controls_view))) {
+      $controls = $controls_view;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (!empty($filters) || !empty($extensions) || !empty($controls)) {
+        if (empty($clean_keys)) {
+          $columns = $this->columns($table);
+          $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        }
+        if (!empty($filters)) {
+          $filters = $this->clean_filters($filters, $clean_keys);
+        }
+        if (!empty($extensions)) {
+          $extensions = $this->clean_extensions($extensions, $clean_keys);
+        }
+        if (!empty($controls)) {
+          $controls = $this->clean_controls($controls, $clean_keys);
+        }
+      }
+    }
     
     $data = null;
-
-    if ($this->controls["view"] || $controls_view) {
-
-      $controls = $this->controls["view"];
-      if ($controls_view || !empty($controls_view) || (is_array($controls_view) && count($controls_view))) {
-        $controls = $controls_view;
-      }
+    
+    if (!empty($controls)) {
 
       $connection = $this->connect();
-
-      $start = $this->escape_string($start, $connection);
-      $limit = $this->escape_string($limit, $connection);
-      $sort_by = $this->escape_string($sort_by, $connection);
-      $sort_direction = $this->escape_string($sort_direction, $connection);
-      $conditions = $this->condition(
-        $this->escape_string($filters, $connection), 
-        $this->escape_string($extensions, $connection), 
-        $this->escape_string($controls, $connection),
-        $allowed_keys
-      );
-
-      if (!empty($keys) && is_array($keys) && count($keys)) {
-        $keys = "`" . implode("`, `", $keys) . "`";
-      }
-
-      $sql = "
-      SELECT " . $keys . " 
-      FROM `" . $table . "` 
-      " . $conditions . "
-      " . $this->order($sort_by, $sort_direction) . "
-      " . $this->limit($start, $limit) . ";";
-      
-      $error = false;
-
       if ($connection) {
-        if ($result = mysqli_query($connection, $sql)) {
-          $queries = array();
+        
+        $error = false;
+
+        $start = $this->escape_string($start, $connection);
+        $limit = $this->escape_string($limit, $connection);
+        $sort_by = $this->escape_string($sort_by, $connection);
+        $sort_direction = $this->escape_string($sort_direction, $connection);
+        $conditions = $this->condition(
+          $this->escape_string($filters, $connection), 
+          $this->escape_string($extensions, $connection), 
+          $this->escape_string($controls, $connection)
+        );
+
+        if (!empty($keys) && is_array($keys)) {
+          $keys = "`" . implode("`, `", $keys) . "`";
+        }
+
+        $query = 
+        "SELECT " . $keys . " FROM `" . $table . "` " . $conditions . " " 
+        . $this->order($sort_by, $sort_direction) . " " . $this->limit($start, $limit) . ";";
+        
+        if ($result = mysqli_query($connection, $query)) {
+
+          $rows = array();
           if ($fetch_type == "assoc") {
-            while($query = $result->fetch_assoc()) {
-              array_push($queries, (object) $query);
+            while($row = $result->fetch_assoc()) {
+              array_push($rows, (object) $row);
             }
           } else {
-            while($query = $result->fetch_array()) {
-              array_push($queries, (object) $query);
+            while($row = $result->fetch_array()) {
+              array_push($rows, (object) $row);
             }
           }
-          $data = $queries;
+          $data = $rows;
           mysqli_free_result($result);
         } else {
           $error = true;
         }
-        $this->disconnect($connection);
-      } else {
-        $error = true;
-      }
 
-      if ($error) {
-        throw new Exception($this->translation->translate("Database encountered error"), 500);
+        $this->disconnect($connection);
+
+        if ($error) {
+          throw new Exception($this->translation->translate("Database encountered error"), 409);
+        }
+
+      } else {
+        throw new Exception($this->translation->translate("Unable to connect to database"), 500);
       }
 
     } else {
@@ -278,71 +308,84 @@ class Database {
     $start = null,
     $limit = null,
     $controls_view = false,
-    $allowed_keys = array()
+    $clean_keys = array()
   ) {
-
+    
     $start = !empty($start) ? $start : null;
     $limit = !empty($limit) ? $limit : null;
-    $activate = !empty($activate) ? $activate : null;
+    $active = !empty($active) ? $active : null;
     $filters = is_array($filters) ? $filters : array();
     $extensions = is_array($extensions) ? $extensions : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
+    $fetch_type = !empty($fetch_type) ? $fetch_type : "assoc";
     $controls_view = !empty($controls_view) ? $controls_view : false;
+    $controls = $this->controls["view"];
+    if ($controls_view || !empty($controls_view) || (is_array($controls_view) && count($controls_view))) {
+      $controls = $controls_view;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (!empty($filters) || !empty($extensions) || !empty($controls)) {
+        if (empty($clean_keys)) {
+          $columns = $this->columns($table);
+          $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        }
+        if (!empty($filters)) {
+          $filters = $this->clean_filters($filters, $clean_keys);
+        }
+        if (!empty($extensions)) {
+          $extensions = $this->clean_extensions($extensions, $clean_keys);
+        }
+        if (!empty($controls)) {
+          $controls = $this->clean_controls($controls, $clean_keys);
+        }
+      }
+    }
     
     $data = 0;
 
-    if ($this->controls["view"] || $controls_view) {
-
-      $controls = $this->controls["view"];
-      if ($controls_view || !empty($controls_view) || (is_array($controls_view) && count($controls_view))) {
-        $controls = $controls_view;
-      }
+    if (!empty($controls)) {
 
       $connection = $this->connect();
-
-      $conditions = $this->condition(
-        $this->escape_string($filters, $connection), 
-        $this->escape_string($extensions, $connection), 
-        $this->escape_string($controls, $connection),
-        $allowed_keys
-      );
-
-      $sql = "
-      SELECT NULL
-      FROM `" . $table . "` 
-      " . $conditions . "
-      " . $this->limit($start, $limit) . ";";
-      if (empty(trim($conditions))) {
-        $sql = "
-        EXPLAIN SELECT NULL
-        FROM `" . $table . "` 
-        " . $this->limit($start, $limit) . ";";
-      }
-      
-      $error = false;
-
       if ($connection) {
-        if ($result = mysqli_query($connection, $sql)) {
+        
+        $error = false;
+
+        $start = $this->escape_string($start, $connection);
+        $limit = $this->escape_string($limit, $connection);
+        $conditions = $this->condition(
+          $this->escape_string($filters, $connection), 
+          $this->escape_string($extensions, $connection), 
+          $this->escape_string($controls, $connection)
+        );
+        
+        $query = "SELECT NULL FROM `" . $table . "` " . $conditions . " " . $this->limit($start, $limit) . ";";
+        if (empty(trim($conditions))) {
+          $query = "EXPLAIN SELECT NULL FROM `" . $table . "` " . $this->limit($start, $limit) . ";";
+        }
+
+        if ($result = mysqli_query($connection, $query)) {
           if (!empty(trim($conditions))) {
             $data = mysqli_num_rows($result);
           } else {
             $data = 0;
-            $query = mysqli_fetch_assoc($result);
-            if (isset($query["rows"]) && !empty($query["rows"])) {
-              $data = (int)($query["rows"]);
+            $row = mysqli_fetch_assoc($result);
+            if (isset($row["rows"]) && !empty($row["rows"])) {
+              $data = (int)($row["rows"]);
             }
           }
           mysqli_free_result($result);
         } else {
           $error = true;
         }
-        $this->disconnect($connection);
-      } else {
-        $error = true;
-      }
 
-      if ($error) {
-        throw new Exception($this->translation->translate("Database encountered error"), 500);
+        $this->disconnect($connection);
+        
+        if ($error) {
+          throw new Exception($this->translation->translate("Database encountered error"), 409);
+        }
+
+      } else {
+        throw new Exception($this->translation->translate("Unable to connect to database"), 500);
       }
 
     } else {
@@ -357,70 +400,75 @@ class Database {
     $table, 
     $parameters,
     $controls_create = false,
-    $allowed_keys = array()
+    $clean_keys = array()
   ) {
 
     $controls_create = !empty($controls_create) ? $controls_create : false;
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
+    $controls = $this->controls["create"];
+    if ($controls_create || !empty($controls_create) || (is_array($controls_create) && count($controls_create))) {
+      $controls = $controls_create;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (empty($clean_keys)) {
+        $columns = $this->columns($table);
+        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+      }
+      if (!empty($controls)) {
+        $controls = $this->clean_controls($controls, $clean_keys);
+      }
+      $parameters = $this->clean_parameters($parameters, $clean_keys);
+    }
    
     $data = null;
 
     if (!empty($parameters)) {
-      if ($this->controls["create"] || $controls_create) {
-
-        $controls = $this->controls["create"];
-        if ($controls_create || !empty($controls_create) || (is_array($controls_create) && count($controls_create))) {
-          $controls = $controls_create;
-        }
+      if (!empty($controls)) {
 
         if ($this->validate_parameters($controls, $parameters)) {
 
           $connection = $this->connect();
-
-          $parameters = $this->clean($parameters, $allowed_keys);
-          $parameters = $this->escape_string($parameters, $connection);
-          
-          $keys = array();
-          $values = array();
-          foreach($parameters as $key => $value) {
-            array_push($keys, "`" . $key . "`");
-            if (is_string($value) || $value === "") {
-              $value = "'" . $value . "'";
-            } else if (is_null($value)) {
-              $value = "NULL";
-            } else if (is_bool($value)) {
-              $value = (!empty($value) ? "true" : "false");
-            }
-            array_push($values, $value);
-          }
-
-          $sql = "
-          INSERT INTO `" . $table . "`
-          (" . implode(", ", $keys) . ") 
-          VALUES (" . implode(", ", $values) . ");";
-          
-          $error = false;
-    
           if ($connection) {
-            if (mysqli_query($connection, $sql)) {
+            
+            $error = false;
+
+            $parameters = $this->escape_string($parameters, $connection);
+            
+            $keys = array();
+            $values = array();
+            foreach ($parameters as $key => $value) {
+              array_push($keys, "`" . $key . "`");
+              if (is_string($value) || $value === "") {
+                $value = "'" . $value . "'";
+              } else if (is_null($value)) {
+                $value = "NULL";
+              } else if (is_bool($value)) {
+                $value = (!empty($value) ? "true" : "false");
+              }
+              array_push($values, $value);
+            }
+            
+            $query = "INSERT INTO `" . $table . "` (" . implode(", ", $keys) . ") VALUES (" . implode(", ", $values) . ");";
+    
+            if (mysqli_query($connection, $query)) {
               $id = mysqli_insert_id($connection);
-              $data = $this->select($table, "*", array("id" => $id), null, true, $allowed_keys);
+              $data = $this->select($table, "*", array("id" => $id), null, true, $clean_keys);
             } else {
               $error = true;
             }
     
             $this->disconnect($connection);
+
+            if ($error) {
+              throw new Exception($this->translation->translate("Database encountered error"), 409);
+            }
     
           } else {
-            $error = true;
-          }
-
-          if ($error) {
-            throw new Exception($this->translation->translate("Database encountered error"), 500);
+            throw new Exception($this->translation->translate("Unable to connect to database"), 500);
           }
 
         } else {
-          throw new Exception($this->translation->translate("Permission denied"), 403);
+          throw new Exception($this->translation->translate("Values not allowed"), 403);
         }
 
       } else {
@@ -438,84 +486,89 @@ class Database {
     $table, 
     $multiple_parameters,
     $controls_create = false,
-    $allowed_keys = array()
+    $clean_keys = array()
   ) {
 
     $controls_create = !empty($controls_create) ? $controls_create : false;
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
+    $controls = $this->controls["create"];
+    if ($controls_create || !empty($controls_create) || (is_array($controls_create) && count($controls_create))) {
+      $controls = $controls_create;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (empty($clean_keys)) {
+        $columns = $this->columns($table);
+        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+      }
+      if (!empty($controls)) {
+        $controls = $this->clean_controls($controls, $clean_keys);
+      }
+      for ($i = 0; $i < count($multiple_parameters); $i++) {
+        $multiple_parameters[$i] = $this->clean_parameters($multiple_parameters[$i], $clean_keys);
+      }
+    }
    
-    $data = null;
+    $data = array();
 
     if (!empty($multiple_parameters)) {
 
-      if ($this->controls["create"] || $controls_create) {
-  
-        $controls = $this->controls["create"];
-        if ($controls_create || !empty($controls_create) || (is_array($controls_create) && count($controls_create))) {
-          $controls = $controls_create;
-        }
+      if (!empty($controls)) {
   
         $error = false;
   
-        foreach($multiple_parameters as $parameters) {
+        foreach ($multiple_parameters as $parameters) {
           if (!$this->validate_parameters($controls, $parameters)) {
             $error = true;
           }
         }
   
         if (!$error) {
-  
-          $sql = "";
+
+          $errors = array();
   
           $connection = $this->connect();
-  
-          $multiple_parameters = $this->escape_string($multiple_parameters, $connection);
-  
-          foreach($multiple_parameters as $parameters) {
-  
-            $parameters = $this->clean($parameters, $allowed_keys);
-  
-            $keys = array();
-            $values = array();
-            foreach($parameters as $key => $value) {
-              array_push($keys, "`" . $key . "`");
-              if (is_string($value) || $value === "") {
-                $value = "'" . $value . "'";
-              } else if (is_null($value)) {
-                $value = "NULL";
-              } else if (is_bool($value)) {
-                $value = (!empty($value) ? "true" : "false");
-              }
-              array_push($values, $value);
-            }
-    
-            $sql .= "
-            INSERT INTO `" . $table . "`
-            (" . implode(", ", $keys) . ") 
-            VALUES (" . implode(", ", $values) . ");";
-  
-          }
-  
-          $error = false;
-    
           if ($connection) {
-            if (mysqli_multi_query($connection, $sql)) {
-              $id = mysqli_insert_id($connection);
-              $data = $this->select($table, "*", array("id" => $id), null, true, $allowed_keys);
-            } else {
-              $error = true;
-            }
-            $this->disconnect($connection);
-          } else {
-            $error = true;
-          }
   
-          if ($error) {
-            throw new Exception($this->translation->translate("Database encountered error"), 500);
+            $multiple_parameters = $this->escape_string($multiple_parameters, $connection);
+    
+            foreach ($multiple_parameters as $parameters) {
+    
+              $keys = array();
+              $values = array();
+              foreach ($parameters as $key => $value) {
+                array_push($keys, "`" . $key . "`");
+                if (is_string($value) || $value === "") {
+                  $value = "'" . $value . "'";
+                } else if (is_null($value)) {
+                  $value = "NULL";
+                } else if (is_bool($value)) {
+                  $value = (!empty($value) ? "true" : "false");
+                }
+                array_push($values, $value);
+              }
+
+              $query = "INSERT INTO `" . $table . "` (" . implode(", ", $keys) . ") VALUES (" . implode(", ", $values) . ")";
+              if (mysqli_query($connection, $query)) {
+                $id = mysqli_insert_id($connection);
+                array_push($data, $this->select($table, "*", array("id" => $id), null, true, $clean_keys));
+              } else {
+                array_push($errors, $parameters);
+              }
+    
+            }
+
+            $this->disconnect($connection);
+  
+            if (!empty($errors)) {
+              throw new Exception($this->translation->translate("Database encountered error"), 409);
+            }
+
+          } else {
+            throw new Exception($this->translation->translate("Unable to connect to database"), 500);
           }
   
         } else {
-          throw new Exception($this->translation->translate("Permission denied"), 403);
+          throw new Exception($this->translation->translate("Values not allowed"), 403);
         }
   
       } else {
@@ -535,69 +588,88 @@ class Database {
     $filters = array(), 
     $extensions = array(), 
     $controls_update = false,
-    $allowed_keys = array()
+    $clean_keys = array()
   ) {
 
     $filters = is_array($filters) ? $filters : array();
     $extensions = is_array($extensions) ? $extensions : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
     $controls_update = !empty($controls_update) ? $controls_update : false;
+    $controls = $this->controls["update"];
+    if ($controls_update || !empty($controls_update) || (is_array($controls_update) && count($controls_update))) {
+      $controls = $controls_update;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (empty($clean_keys)) {
+        $columns = $this->columns($table);
+        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+      }
+      if (!empty($filters)) {
+        $filters = $this->clean_filters($filters, $clean_keys);
+      }
+      if (!empty($extensions)) {
+        $extensions = $this->clean_extensions($extensions, $clean_keys);
+      }
+      if (!empty($controls)) {
+        $controls = $this->clean_controls($controls, $clean_keys);
+      }
+      $parameters = $this->clean_parameters($parameters, $clean_keys);
+    }
     
     $data = null;
-
+    
     if (!empty($parameters)) {
-      if ($this->controls["update"] || $controls_update) {
+      if (!empty($controls)) {
 
-        $controls = $this->controls["update"];
-        if ($controls_update || !empty($controls_update) || (is_array($controls_update) && count($controls_update))) {
-          $controls = $controls_update;
-        }
+        if ($this->validate_parameters($controls, $parameters)) {
 
-        $connection = $this->connect();
+          $connection = $this->connect();
+          if ($connection) {
+            
+            $error = false;
 
-        $parameters = $this->clean($parameters, $allowed_keys);
-        $parameters = $this->escape_string($parameters, $connection);
-        $conditions = $this->condition(
-          $this->escape_string($filters, $connection), 
-          $this->escape_string($extensions, $connection), 
-          $this->escape_string($controls, $connection),
-          $allowed_keys
-        );
+            $parameters = $this->escape_string($parameters, $connection);
 
-        $sets = array();
-        foreach($parameters as $key => $value) {
-          if (is_string($value) || $value === "") {
-            $value = "'" . $value . "'";
-          } else if (is_null($value)) {
-            $value = "NULL";
-          } else if (is_bool($value)) {
-            $value = (!empty($value) ? "true" : "false");
-          }
-          array_push($sets, "`" . $key . "` = " . $value);
-        }
-        
-        $data_current = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $allowed_keys);
-        
-        $sql = "
-        UPDATE `" . $table . "`
-        SET " . implode(", ", $sets) . "
-        " . $conditions . ";";
-        
-        $error = false;
+            $conditions = $this->condition(
+              $this->escape_string($filters, $connection), 
+              $this->escape_string($extensions, $connection), 
+              $this->escape_string($controls, $connection)
+            );
 
-        if ($connection) {
-          if (mysqli_query($connection, $sql)) {
-            $data = $this->select_multiple($table, "*", $filters, $extensions, $controls, null, null, null, true, $allowed_keys);
+            $sets = array();
+            foreach ($parameters as $key => $value) {
+              if (is_string($value) || $value === "") {
+                $value = "'" . $value . "'";
+              } else if (is_null($value)) {
+                $value = "NULL";
+              } else if (is_bool($value)) {
+                $value = (!empty($value) ? "true" : "false");
+              }
+              array_push($sets, "`" . $key . "` = " . $value);
+            }
+            
+            // $data_current = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys);
+            
+            $query = "UPDATE `" . $table . "` SET " . implode(", ", $sets) . " " . $conditions . ";";
+
+            if (mysqli_query($connection, $query)) {
+              $data = $this->select_multiple($table, "*", $filters, $extensions, $controls, null, null, null, true, $clean_keys);
+            } else {
+              $error = true;
+            }
+
+            $this->disconnect($connection);
+            
+            if ($error) {
+              throw new Exception($this->translation->translate("Database encountered error"), 409);
+            }
+
           } else {
-            $error = true;
+            throw new Exception($this->translation->translate("Unable to connect to database"), 500);
           }
-          $this->disconnect($connection);
-        } else {
-          $error = true;
-        }
 
-        if ($error) {
-          throw new Exception($this->translation->translate("Database encountered error"), 500);
+        } else {
+          throw new Exception($this->translation->translate("Values not allowed"), 403);
         }
 
       } else {
@@ -617,82 +689,99 @@ class Database {
     $multiple_filters = array(), 
     $extensions = array(), 
     $controls_update = false,
-    $allowed_keys = array()
+    $clean_keys = array()
   ) {
 
     $multiple_filters = is_array($multiple_filters) ? $multiple_filters : array();
     $extensions = is_array($extensions) ? $extensions : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
     $controls_update = !empty($controls_update) ? $controls_update : false;
+    $controls = $this->controls["update"];
+    if ($controls_update || !empty($controls_update) || (is_array($controls_update) && count($controls_update))) {
+      $controls = $controls_update;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (empty($clean_keys)) {
+        $columns = $this->columns($table);
+        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+      }
+      if (!empty($extensions)) {
+        $extensions = $this->clean_extensions($extensions, $clean_keys);
+      }
+      if (!empty($controls)) {
+        $controls = $this->clean_controls($controls, $clean_keys);
+      }
+      for ($i = 0; $i < count($multiple_filters); $i++) {
+        $multiple_filters[$i] = $this->clean_filters($multiple_filters[$i], $clean_keys);
+      }
+      $parameters = $this->clean_parameters($parameters, $clean_keys);
+    }
     
-    $data = null;
+    $data = array();
 
     if (!empty($parameters)) {
-      if ($this->controls["update"] || $controls_update) {
+      if (!empty($controls)) {
 
-        $controls = $this->controls["update"];
-        if ($controls_update || !empty($controls_update) || (is_array($controls_update) && count($controls_update))) {
-          $controls = $controls_update;
-        }
+        if ($this->validate_parameters($controls, $parameters)) {
 
-        $data_current = array();
+          // $data_current = array();
 
-        $sql = "";
+          $queries = array();
 
-        $connection = $this->connect();
+          $connection = $this->connect();
+          if ($connection) {
 
-        $parameters = $this->clean($parameters, $allowed_keys);
-        $parameters = $this->escape_string($multiple_filters, $parameters);
-        $multiple_filters = $this->escape_string($multiple_filters, $connection);
+            $error = false;
 
-        foreach($multiple_filters as $filters) {
-    
-          $conditions = $this->condition(
-            $this->escape_string($filters, $connection), 
-            $this->escape_string($extensions, $connection), 
-            $this->escape_string($controls, $connection),
-            $allowed_keys
-          );
+            $parameters = $this->escape_string($multiple_filters, $parameters);
+            $multiple_filters = $this->escape_string($multiple_filters, $connection);
 
-          $sets = array();
-          foreach($parameters as $key => $value) {
-            if (is_string($value) || $value === "") {
-              $value = "'" . $value . "'";
-            } else if (is_null($value)) {
-              $value = "NULL";
-            } else if (is_bool($value)) {
-              $value = (!empty($value) ? "true" : "false");
-            }
-            array_push($sets, "`" . $key . "` = " . $value);
-          }
-          
-          array_push($this->select_multiple($data_current, $table, "*", $filters, $extensions, null, null, null, null, true, $allowed_keys));
-          
-          $sql .= "
-          UPDATE `" . $table . "`
-          SET " . implode(", ", $sets) . "
-          " . $conditions . ";";
-
-        }
+            foreach ($multiple_filters as $filters) {
         
-        $error = false;
-    
-        if ($connection) {
-          if (mysqli_multi_query($connection, $sql)) {
-            $data = array();
-            foreach($multiple_filters as $filters) {
-              array_push($data, $this->select_multiple($table, "*", $filters, $extensions, $controls, null, null, null, true, $allowed_keys));
-            }
-          } else {
-            $error = true;
-          }
-          $this->disconnect($connection);
-        } else {
-          $error = true;
-        }
+              $conditions = $this->condition(
+                $this->escape_string($filters, $connection), 
+                $this->escape_string($extensions, $connection), 
+                $this->escape_string($controls, $connection)
+              );
 
-        if ($error) {
-          throw new Exception($this->translation->translate("Database encountered error"), 500);
+              $sets = array();
+              foreach ($parameters as $key => $value) {
+                if (is_string($value) || $value === "") {
+                  $value = "'" . $value . "'";
+                } else if (is_null($value)) {
+                  $value = "NULL";
+                } else if (is_bool($value)) {
+                  $value = (!empty($value) ? "true" : "false");
+                }
+                array_push($sets, "`" . $key . "` = " . $value);
+              }
+
+              // array_push($data_current, $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys));
+              
+              array_push($queries, "UPDATE `" . $table . "` SET " . implode(", ", $sets) . " " . $conditions);
+
+            }
+          
+            if (mysqli_multi_query($connection, (implode(";", $queries) . ";"))) {
+              foreach ($multiple_filters as $filters) {
+                array_push($data, $this->select_multiple($table, "*", $filters, $extensions, $controls, null, null, null, true, $clean_keys));
+              }
+            } else {
+              $error = true;
+            }
+
+            $this->disconnect($connection);
+
+            if ($error) {
+              throw new Exception($this->translation->translate("Database encountered error"), 409);
+            }
+
+          } else {
+            throw new Exception($this->translation->translate("Unable to connect to database"), 500);
+          }
+
+        } else {
+          throw new Exception($this->translation->translate("Values not allowed"), 403);
         }
 
       } else {
@@ -711,54 +800,67 @@ class Database {
     $filters = array(), 
     $extensions = array(), 
     $controls_delete = false,
-    $allowed_keys = array()
+    $clean_keys = array()
   ) {
 
     $filters = is_array($filters) ? $filters : array();
     $extensions = is_array($extensions) ? $extensions : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
     $controls_delete = !empty($controls_delete) ? $controls_delete : false;
+    $controls = $this->controls["delete"];
+    if ($controls_delete || !empty($controls_delete) || (is_array($controls_delete) && count($controls_delete))) {
+      $controls = $controls_delete;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (empty($clean_keys)) {
+        $columns = $this->columns($table);
+        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+      }
+      if (!empty($filters)) {
+        $filters = $this->clean_filters($filters, $clean_keys);
+      }
+      if (!empty($extensions)) {
+        $extensions = $this->clean_extensions($extensions, $clean_keys);
+      }
+      if (!empty($controls)) {
+        $controls = $this->clean_controls($controls, $clean_keys);
+      }
+    }
     
     $data = null;
 
-    if ($this->controls["delete"] || $controls_delete) {
+    if (!empty($controls)) {
 
-      $controls = $this->controls["delete"];
-      if ($controls_delete || !empty($controls_delete) || (is_array($controls_delete) && count($controls_delete))) {
-        $controls = $controls_delete;
-      }
-
-      $data_current = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $allowed_keys);
-      if (!empty($data_current) && count($data_current)) {
+      $data_current = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys);
+      if (!empty($data_current)) {
 
         $connection = $this->connect();
-  
-        $conditions = $this->condition(
-          $this->escape_string($filters, $connection), 
-          $this->escape_string($extensions, $connection), 
-          $this->escape_string($controls, $connection),
-          $allowed_keys
-        );
-
-        $sql = "
-        DELETE FROM `" . $table . "`
-        " . $conditions . ";";
-  
-        $error = false;
-  
         if ($connection) {
-          if (mysqli_query($connection, $sql)) {
+    
+          $error = false;
+  
+          $conditions = $this->condition(
+            $this->escape_string($filters, $connection), 
+            $this->escape_string($extensions, $connection), 
+            $this->escape_string($controls, $connection)
+          );
+
+          $query = "DELETE FROM `" . $table . "` " . $conditions . ";";
+  
+          if (mysqli_query($connection, $query)) {
             $data = $data_current;
           } else {
             $error = true;
           }
+
           $this->disconnect($connection);
-        } else {
-          $error = true;
-        }
   
-        if ($error) {
-          throw new Exception($this->translation->translate("Database encountered error"), 500);
+          if ($error) {
+            throw new Exception($this->translation->translate("Database encountered error"), 409);
+          }
+
+        } else {
+          throw new Exception($this->translation->translate("Unable to connect to database"), 500);
         }
         
       } else {
@@ -778,61 +880,74 @@ class Database {
     $multiple_filters = array(), 
     $extensions = array(), 
     $controls_delete = false,
-    $allowed_keys = array()
+    $clean_keys = array()
   ) {
 
     $multiple_filters = is_array($multiple_filters) ? $multiple_filters : array();
     $extensions = is_array($extensions) ? $extensions : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
     $controls_delete = !empty($controls_delete) ? $controls_delete : false;
+    $controls = $this->controls["delete"];
+    if ($controls_delete || !empty($controls_delete) || (is_array($controls_delete) && count($controls_delete))) {
+      $controls = $controls_delete;
+    }
+    if ($clean_keys !== false) {
+      $clean_keys = is_array($clean_keys) ? $clean_keys : array();
+      if (empty($clean_keys)) {
+        $columns = $this->columns($table);
+        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+      }
+      if (!empty($extensions)) {
+        $extensions = $this->clean_extensions($extensions, $clean_keys);
+      }
+      if (!empty($controls)) {
+        $controls = $this->clean_controls($controls, $clean_keys);
+      }
+      for ($i = 0; $i < count($multiple_filters); $i++) {
+        $multiple_filters[$i] = $this->clean_filters($multiple_filters[$i], $clean_keys);
+      }
+    }
     
     $data = null;
 
-    if ($this->controls["delete"] || $controls_delete) {
-
-      $controls = $this->controls["delete"];
-      if ($controls_delete || !empty($controls_delete) || (is_array($controls_delete) && count($controls_delete))) {
-        $controls = $controls_delete;
-      }
+    if (!empty($controls)) {
 
       $data_current = array();
 
-      $sql = "";
+      $queries = array();
 
       $connection = $this->connect();
-
-      foreach($multiple_filters as $filters) {
-  
-        $conditions = $this->condition(
-          $this->escape_string($filters, $connection), 
-          $this->escape_string($extensions, $connection), 
-          $this->escape_string($controls, $connection),
-          $allowed_keys
-        );
-
-        array_push($data_current, $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $allowed_keys));
-
-        $sql .= "
-        DELETE FROM `" . $table . "`
-        " . $conditions . ";";
-
-      }
-
-      $error = false;
-
       if ($connection) {
-        if (mysqli_multi_query($connection, $sql)) {
+
+        $error = false;
+
+        foreach ($multiple_filters as $filters) {
+    
+          $conditions = $this->condition(
+            $this->escape_string($filters, $connection), 
+            $this->escape_string($extensions, $connection), 
+            $this->escape_string($controls, $connection)
+          );
+
+          array_push($data_current, $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys));
+
+          array_push($queries, "DELETE FROM `" . $table . "` " . $conditions);
+
+        }
+
+        if (mysqli_multi_query($connection, (implode(";", $queries) . ";"))) {
           $data = $data_current;
         } else {
           $error = true;
         }
-        $this->disconnect($connection);
-      } else {
-        $error = true;
-      }
 
-      if ($error) {
-        throw new Exception($this->translation->translate("Database encountered error"), 500);
+        $this->disconnect($connection);
+
+        if ($error) {
+          throw new Exception($this->translation->translate("Database encountered error"), 409);
+        }
+
+      } else {
+        throw new Exception($this->translation->translate("Unable to connect to database"), 500);
       }
 
     } else {
@@ -855,47 +970,69 @@ class Database {
     return $data;
   }
 
-  function order($sort_by = null, $sort_direction = null) {
-    $data = "";
-    if (isset($sort_by) && !empty($sort_by)) {
-      $data .= "ORDER BY `" . $sort_by . "` ";
-      if (isset($sort_direction) && !empty($sort_direction)) {
-        $data .= $sort_direction . " ";
-      } else {
-        $data .= "asc ";
+  function order($sort_by = array(), $sort_direction = array()) {
+
+    $sort_by = is_array($sort_by) ? $sort_by : (!empty($sort_by) ? array($sort_by) : array());
+    $sort_direction = is_array($sort_direction) ? $sort_direction : (!empty($sort_direction) ? array($sort_direction) : array());
+
+    if (count($sort_by) > count($sort_direction)) {
+      if (!empty($sort_direction)) {
+        for ($i = 0; $i < count($sort_by); $i++) {
+          if ($i > count($sort_direction) - 1) {
+            $sort_direction[$i] = $sort_direction[$i - 1];
+          }
+        }
       }
     }
+
+    $sorts = array_map(function($by, $direction) {
+      $data = "";
+      if (isset($by) && !empty($by)) {
+        $data .= implode(".", array_map(function($value) { return "`" . $value . "`"; }, explode(".", trim(trim($by, "[]'`"), "\'")))) . " ";
+        if (!isset($direction) || empty($direction)) {
+          $direction = "asc";
+        }
+        $data .= strtoupper($direction);
+      }
+      return $data;
+    }, $sort_by, $sort_direction);
+    
+    $data = "";
+    if (!empty($sorts) && isset($sorts[0]) && !empty($sorts[0])) {
+      $data = "ORDER BY " . implode(", ", $sorts);
+    }
+    
     return $data;
+
   }
 
   function condition(
     $filters = array(), 
     $extensions = array(), 
-    $controls = array(), 
-    $allowed_keys = array()
+    $controls = array(),
+    $table = null
   ) {
 
     $filters = is_array($filters) ? $filters : array();
     $extensions = is_array($extensions) ? $extensions : array();
     $controls = is_array($controls) ? $controls : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
 
     $data = "";
 
-    $filters_is_set = !empty($filters) && is_array($filters) && count($filters);
-    $extensions_is_set = !empty($extensions) && is_array($extensions) && count($extensions);
-    $controls_is_set = !empty($controls) && is_array($controls) && count($controls);
+    $filters_is_set = !empty($filters) && is_array($filters);
+    $extensions_is_set = !empty($extensions) && is_array($extensions);
+    $controls_is_set = !empty($controls) && is_array($controls);
     $filters_arranged = array();
     if ($filters_is_set) {
-      $filters_arranged = $this->arrange_filters($filters, $allowed_keys);
+      $filters_arranged = $this->arrange_filters($filters, $table);
     }
     $extensions_arranged = array();
     if ($extensions_is_set) {
-      $extensions_arranged = $this->arrange_extensions($extensions, $allowed_keys);
+      $extensions_arranged = $this->arrange_extensions($extensions, $table);
     }
     $controls_arranged = array();
     if ($controls_is_set) {
-      $controls_arranged = $this->arrange_controls($controls, $allowed_keys);
+      $controls_arranged = $this->arrange_controls($controls, $table);
     }
 
     $conditions = array_merge(
@@ -903,7 +1040,7 @@ class Database {
       $extensions_arranged, 
       $controls_arranged
     );
-    if (count($conditions)) {
+    if (!empty($conditions)) {
       $data = "WHERE " . implode(" AND ", $conditions);
     }
 
@@ -911,15 +1048,14 @@ class Database {
 
   }
 
-  private function arrange_filters($filters = array(), $allowed_keys = array()) {
+  private function arrange_filters($filters = array(), $table = null) {
 
     $filters = is_array($filters) ? $filters : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
 
     $data = array();
-    if (isset($filters) && !empty($filters) && is_array($filters) && count($filters)) {
-      foreach($filters as $key => $value) {
-        if (isset($value) && (!count($allowed_keys) || in_array($key, $allowed_keys))) {
+    if (isset($filters) && !empty($filters) && is_array($filters)) {
+      foreach ($filters as $key => $value) {
+        if (isset($value)) {
           if (is_string($value) || $value === "") {
             $value = "'" . $value . "'";
           } else if (is_null($value)) {
@@ -927,46 +1063,58 @@ class Database {
           } else if (is_bool($value)) {
             $value = (!empty($value) ? "true" : "false");
           }
-          array_push($data, "`" . $key . "` = " . $value);
+          $key_parts = array_map(function($value) { 
+            return "`" . $value . "`"; 
+          }, explode(".", trim(trim($key, "[]'`"), "\'")));
+          if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
+            $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
+          } else {
+            $key = implode(".", $key_parts);
+          }
+          array_push($data, $key . " = " . $value);
         }
       }
     }
     return $data;
   }
 
-  private function arrange_extensions($extensions = array(), $allowed_keys = array()) {
+  private function arrange_extensions($extensions = array(), $table = null) {
 
     $extensions = is_array($extensions) ? $extensions : array();
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
 
     $data = array();
-    if (isset($extensions) && !empty($extensions) && is_array($extensions) && count($extensions)) {
+    if (isset($extensions) && !empty($extensions) && is_array($extensions)) {
       for ($i = 0; $i < count($extensions); $i++) {
         if (isset($extensions[$i])) {
-          if (isset($extensions[$i]["extensions"]) 
-          && is_array($extensions[$i]["extensions"])) {
+          if (
+            isset($extensions[$i]["extensions"]) 
+            && is_array($extensions[$i]["extensions"])
+          ) {
             array_push($data, 
               (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "")
               . $this->arrange_extensions($extensions[$i]["extensions"])[0]
             );
           } else {
-            $key = str_replace("`", "", $extensions[$i]["key"]);
-            if (!count($allowed_keys) || in_array($key, $allowed_keys)) {
-              $value = trim(str_replace("`", "", $extensions[$i]["value"]), "\'");
-              if (Utilities::length($value) < Utilities::length($extensions[$i]["value"])) {
-                $value = "'" . $value . "'";
-              }
-              array_push($data, 
-                (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "") . 
-                "`" . $key . "` " . 
-                $extensions[$i]["operator"] . " " . 
-                $value
-              );
+            $value = $extensions[$i]["value"];
+            if (Utilities::length(trim(trim($extensions[$i]["value"], "[]\'`"), "\'")) < Utilities::length($extensions[$i]["value"])) {
+              $value = "'" . trim(trim($extensions[$i]["value"], "[]\'`"), "\'") . "'";
             }
+            $key_parts = array_map(function($value) { 
+              return "`" . $value . "`"; 
+            }, explode(".", trim(trim($extensions[$i]["key"], "[]'`"), "\'")));
+            if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
+              $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
+            } else {
+              $key = implode(".", $key_parts);
+            }
+            array_push($data, 
+              (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "") 
+              . $key . " " . $extensions[$i]["operator"] . " " . $value
+            );
           }
         }
       }
-      if (count($data)) {
+      if (!empty($data)) {
         return array(
           "(" . implode(" ", $data) . ")"
         );
@@ -978,52 +1126,73 @@ class Database {
     }
   }
 
-  private function arrange_controls($controls, $allowed_keys = array()) {
-
-    $allowed_keys = is_array($allowed_keys) ? $allowed_keys : array();
+  private function arrange_controls($controls, $table = null) {
     
     $data = array();
 
-    if (!empty($controls) && is_array($controls) && count($controls)) {
-      $index = 0;
-      foreach($controls as $rule) {
-        $control = "";
-        $operator = "";
-        foreach($this::$comparisons as $comparison) {
-          if (stristr(strtolower($rule), strtolower($comparison)) !== false) {
-            $operator = $comparison;
+    if (!empty($controls) && is_array($controls)) {
+      foreach ($controls as $rules) {
+
+        $consolidate = function($rule, $table) {
+
+          $control = "";
+          $key = "";
+          $value = "";
+          $operator = "";
+          $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")((.*)|<[A-Za-z_]+>)/";
+          if (preg_match($rule_pattern, $rule, $matches)) {
+            if (count($matches) === 5) {
+              $key = $matches[1];
+              $value = $matches[3];
+              $operator = $matches[2];
+            }
           }
-        }
-        if (!empty($operator)) {
-          $prefix = " AND ";
-          if ($index == 0) {
-            $prefix = "";
-          }
-          $rule_parts = explode($operator, $rule);
-          $key = trim(trim($rule_parts[0], "["), "]");
-          if (!count($allowed_keys) || in_array($key, $allowed_keys)) {
-            $control .= $prefix . "`" . $key . "`" . $operator;
-            if ($rule_parts[1] == "<session>") {
+          if (!empty($key) && !empty($value) && !empty($operator) && in_array($operator, $this::$comparisons)) {
+            if ($value == "<session>") {
               if (isset($this->session) && !empty($this->session) && isset($this->session->id)) {
-                $control .= "'" . $this->session->id . "'";
+                $value = "'" . $this->session->id . "'";
               } else {
-                $control .= "'0'";
+                $value = "'0'";
               }
             } else {
-              if (strpos($rule_parts[1], "[") === 0 && strpos($rule_parts[1], "]") === (strlen($rule_parts[1]) - 1)) {
-                $control .= "`" . trim(trim($rule_parts[1], "["), "]") . "`";
-              } else {
-                $control .= $rule_parts[1];
+              if (Utilities::length(trim(trim($value, "[]\'`"), "\'")) < Utilities::length($value)) {
+                $value = "'" . trim(trim($value, "[]\'`"), "\'") . "'";
               }
+            }
+            $key_parts = array_map(function($value) { 
+              return "`" . $value . "`"; 
+            }, explode(".", trim(trim($key, "[]'`"), "\'")));
+            if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
+              $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
+            } else {
+              $key = implode(".", $key_parts);
+            }
+            $control = $key . " " . $operator . " " . $value;
+          }
+
+          return $control;
+
+        };
+
+        if (is_array($rules)) {
+          foreach ($rules as $rule) {
+            $consolidated = $consolidate($rule, $table);
+            if (!empty($consolidated)) {
+              array_push($data, $consolidated);
+            }
+          }
+        } else {
+          $rules = explode(",", $rules);
+          foreach ($rules as $rule) {
+            $consolidated = $consolidate($rule, $table);
+            if (!empty($consolidated)) {
+              array_push($data, $consolidated);
             }
           }
         }
-        if (!empty($control)) {
-          array_push($data, $control);
-        }
-        $index += 1;
+        
       }
-      if (count($data)) {
+      if (!empty($data)) {
         return array(
           "(" . implode(" OR ", $data) . ")"
         );
@@ -1036,150 +1205,176 @@ class Database {
     
   }
 
-  private function validate_parameters($controls, $parameters = null) {
+  function validate_parameters($controls, $parameters = null) {
     $result = true;
     $key = "";
     if (isset($parameters) && !empty($parameters)) {
-      if (!empty($controls) && is_array($controls) && count($controls)) {
-        foreach($controls as $rule) {
-          $operator = "";
-          foreach($this::$comparisons as $comparison) {
-            if (stristr(strtolower($rule), strtolower($comparison)) !== false) {
-              $operator = $comparison;
+      if (!empty($controls) && is_array($controls)) {
+        foreach ($controls as $rules) {
+
+          $consolidate = function($rule) {
+
+            $result = true;
+
+            $key = "";
+            $value = "";
+            $operator = "";
+            $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")([A-Za-z_]+|<[A-Za-z_]+>)/";
+
+            if (preg_match($rule_pattern, $rule, $matches)) {
+              if (count($matches) === 3) {
+                $key = $matches[0];
+                $value = $matches[2];
+                $operator = $matches[1];
+              }
             }
-          }
-          if (!empty($operator)) {
-            $rule_parts = explode($operator, $rule);
-            if (isset($rule_parts[1])) {
-              if ($rule_parts[1] == "<session>") {
-                $rule_key = trim(trim($rule_parts[0], "["), "]");
-                if (isset($parameters[$rule_key])) {
-                  $parameter = $parameters[$rule_key];
-                  $key = $rule_key;
-                  if (isset($this->session) && isset($this->session->id)) {
-                    $rule_parts[1] = $this->session->id;
-                  }
-                  $compare = trim($rule_parts[1], "'");
-                  if (
-                    (
-                      $operator == "=" && !($parameter == $compare)
+            if (!empty($key) && !empty($value) && !empty($operator) && in_array($operator, $this::$comparisons)) {
+              $key = trim(trim($key, "[]'`"), "\'");
+              if ($value == "<session>") {
+                if (isset($this->session) && !empty($this->session) && isset($this->session->id)) {
+                  $value = "'" . $this->session->id . "'";
+                } else {
+                  $value = "'0'";
+                }
+              } else {
+                if (Utilities::length(trim(trim($value, "[]\'`"), "\'")) < Utilities::length($value)) {
+                  $value = "'" . trim(trim($value, "[]\'`"), "\'") . "'";
+                }
+              }
+              $value = trim($value, "'");
+              if (isset($parameters[$key])) {
+                $parameter = $parameters[$key];
+                if (
+                  (
+                    $operator == "=" && !($parameter == $value)
+                  ) || (
+                    $operator == "!=" && !($parameter != $value)
+                  ) || (
+                    $operator == ">" && !($parameter > $value)
+                  ) || (
+                    $operator == "<" && !($parameter < $value)
+                  ) || (
+                    $operator == ">=" && !($parameter >= $value)
+                  ) || (
+                    $operator == "<=" && !($parameter <= $value)
+                  ) || (
+                    $operator == "<>" && !($parameter <> $value)
+                  )
+                ) {
+                  $result = false;
+                } else if ($operator == "LIKE" || $operator == "NOT LIKE") {
+                  $comparer = str_replace("%", "", $value);
+                  $siginificant = str_replace(
+                    strtolower($comparer), "", strtolower($parameter)
+                  );
+                  $not_like_condition = (
+                    strpos(strtolower($parameter), strtolower($value)) === false
+                    || (
+                      stristr($parameter, "%") === false
+                      && !(strtolower($parameter) == strtolower($value))
                     ) || (
-                      $operator == "!=" && !($parameter != $compare)
+                      strpos($parameter, "%") === 0
+                      && strpos($parameter, "%") === Utilities::length($comparer) - 1
+                      && stristr(strtolower($parameter), $comparer) === false
                     ) || (
-                      $operator == ">" && !($parameter > $compare)
+                      strpos($parameter, "%") === 0
+                      && (!(strpos(strtolower($parameter), $siginificant) === 0)) && !empty($siginificant)
                     ) || (
-                      $operator == "<" && !($parameter < $compare)
-                    ) || (
-                      $operator == ">=" && !($parameter >= $compare)
-                    ) || (
-                      $operator == "<=" && !($parameter <= $compare)
-                    ) || (
-                      $operator == "<>" && !($parameter <> $compare)
+                      strpos($parameter, "%") === Utilities::length($comparer) - 1
+                      && (strpos(strtolower($parameter), $siginificant) === 0)
+                      && (!(strpos(strtolower($parameter), $siginificant) === 0)) && !empty($siginificant)
                     )
+                  );
+                  if ($operator == "LIKE") {
+                    if ($not_like_condition) {
+                      $result = false;
+                    }
+                  } else {
+                    if (!$not_like_condition) {
+                      $result = false;
+                    }
+                  }
+                } else if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
+                  $value_parts = explode(":", $value);
+                  $minimum = trim($value_parts[0], "'");
+                  $maximum = trim($value_parts[1], "'");
+                  if (
+                    (strtotime($minimum) || strtotime($minimum . " 00:00:00"))
+                    && (strtotime($maximum) || strtotime($maximum . " 00:00:00"))
+                    && (strtotime($parameter) || strtotime($parameter . " 00:00:00"))
                   ) {
-                    $result = false;
-                  } else if ($operator == "LIKE" || $operator == "NOT LIKE") {
-                    $compare_string = str_replace("%", "", $compare);
-                    $siginificant = str_replace(
-                      strtolower($compare_string), "", strtolower($parameter)
-                    );
-                    $not_like_condition = (
-                      strpos(strtolower($parameter), strtolower($compare)) === false
-                      || (
-                        stristr($parameter, "%") === false
-                        && !(strtolower($parameter) == strtolower($compare))
-                      ) || (
-                        strpos($parameter, "%") === 0
-                        && strpos($parameter, "%") === Utilities::length($compare_string) - 1
-                        && stristr(strtolower($parameter), $compare_string) === false
-                      ) || (
-                        strpos($parameter, "%") === 0
-                        && (!(strpos(strtolower($parameter), $siginificant) === 0)) && !empty($siginificant)
-                      ) || (
-                        strpos($parameter, "%") === Utilities::length($compare_string) - 1
-                        && (strpos(strtolower($parameter), $siginificant) === 0)
-                        && (!(strpos(strtolower($parameter), $siginificant) === 0)) && !empty($siginificant)
-                      )
-                    );
-                    if ($operator == "LIKE") {
-                      if ($not_like_condition) {
+                    $datetime = strtotime($parameter . " 00:00:00");
+                    if (strtotime($parameter)) {
+                      $datetime = strtotime($parameter);
+                    }
+                    $minimum_datetime = strtotime($minimum . " 00:00:00");
+                    if (strtotime($minimum)) {
+                      $minimum_datetime = strtotime($minimum);
+                    }
+                    $maximum_datetime = strtotime($maximum . " 00:00:00");
+                    if (strtotime($maximum)) {
+                      $maximum_datetime = strtotime($maximum);
+                    }
+                    if ($operator == "BETWEEN") {
+                      if ($datetime < $minimum_datetime || $datetime > $maximum_datetime) {
                         $result = false;
                       }
-                    } else {
-                      if (!$not_like_condition) {
+                    } else if ($operator == "NOT BETWEEN") {
+                      if ($datetime < $minimum_datetime && $datetime > $maximum_datetime) {
                         $result = false;
                       }
                     }
-                  } else if ($operator == "BETWEEN" || $operator == "NOT BETWEEN") {
-                    $compare_parts = explode(":", $rule_parts[1]);
-                    $minimum = trim($compare_parts[0], "'");
-                    $maximum = trim($compare_parts[1], "'");
-                    if (
-                      (strtotime($minimum) || strtotime($minimum . " 00:00:00"))
-                      && (strtotime($maximum) || strtotime($maximum . " 00:00:00"))
-                      && (strtotime($parameter) || strtotime($parameter . " 00:00:00"))
-                    ) {
-                      $datetime = strtotime($parameter . " 00:00:00");
-                      if (strtotime($parameter)) {
-                        $datetime = strtotime($parameter);
+                  } else if (
+                    is_numeric($minimum) && is_numeric($minimum)
+                    && is_numeric($maximum) && is_numeric($maximum)
+                    && is_numeric($parameter) && is_numeric($parameter)
+                  ) {
+                    if ($operator == "BETWEEN") {
+                      if (floatval($parameter) < floatval($minimum) || floatval($parameter) > floatval($maximum)) {
+                        $result = false;
                       }
-                      $minimum_datetime = strtotime($minimum . " 00:00:00");
-                      if (strtotime($minimum)) {
-                        $minimum_datetime = strtotime($minimum);
+                    } else if ($operator == "NOT BETWEEN") {
+                      if (floatval($parameter) < floatval($minimum) && floatval($parameter) > floatval($maximum)) {
+                        $result = false;
                       }
-                      $maximum_datetime = strtotime($maximum . " 00:00:00");
-                      if (strtotime($maximum)) {
-                        $maximum_datetime = strtotime($maximum);
+                    }
+                  } else if (
+                    is_numeric(str_replace(",", "", $minimum)) && is_numeric(str_replace(",", "", $minimum))
+                    && is_numeric(str_replace(",", "", $maximum)) && is_numeric(str_replace(",", "", $maximum))
+                    && is_numeric(str_replace(",", "", $parameter)) && is_numeric(str_replace(",", "", $parameter))
+                  ) {
+                    if ($operator == "BETWEEN") {
+                      if (
+                        floatval(str_replace(",", "", $parameter)) < floatval(str_replace(",", "", $minimum)) 
+                        || floatval(str_replace(",", "", $parameter)) > floatval(str_replace(",", "", $maximum))
+                      ) {
+                        $result = false;
                       }
-                      if ($operator == "BETWEEN") {
-                        if ($datetime < $minimum_datetime || $datetime > $maximum_datetime) {
-                          $result = false;
-                        }
-                      } else if ($operator == "NOT BETWEEN") {
-                        if ($datetime < $minimum_datetime && $datetime > $maximum_datetime) {
-                          $result = false;
-                        }
-                      }
-                    } else if (
-                      is_numeric($minimum) && is_numeric($minimum)
-                      && is_numeric($maximum) && is_numeric($maximum)
-                      && is_numeric($parameter) && is_numeric($parameter)
-                    ) {
-                      if ($operator == "BETWEEN") {
-                        if (floatval($parameter) < floatval($minimum) || floatval($parameter) > floatval($maximum)) {
-                          $result = false;
-                        }
-                      } else if ($operator == "NOT BETWEEN") {
-                        if (floatval($parameter) < floatval($minimum) && floatval($parameter) > floatval($maximum)) {
-                          $result = false;
-                        }
-                      }
-                    } else if (
-                      is_numeric(str_replace(",", "", $minimum)) && is_numeric(str_replace(",", "", $minimum))
-                      && is_numeric(str_replace(",", "", $maximum)) && is_numeric(str_replace(",", "", $maximum))
-                      && is_numeric(str_replace(",", "", $parameter)) && is_numeric(str_replace(",", "", $parameter))
-                    ) {
-                      if ($operator == "BETWEEN") {
-                        if (
-                          floatval(str_replace(",", "", $parameter)) < floatval(str_replace(",", "", $minimum)) 
-                          || floatval(str_replace(",", "", $parameter)) > floatval(str_replace(",", "", $maximum))
-                        ) {
-                          $result = false;
-                        }
-                      } else if ($operator == "NOT BETWEEN") {
-                        if (
-                          floatval(str_replace(",", "", $parameter)) < floatval(str_replace(",", "", $minimum)) 
-                          && floatval(str_replace(",", "", $parameter)) > floatval(str_replace(",", "", $maximum))
-                        ) {
-                          $result = false;
-                        }
+                    } else if ($operator == "NOT BETWEEN") {
+                      if (
+                        floatval(str_replace(",", "", $parameter)) < floatval(str_replace(",", "", $minimum)) 
+                        && floatval(str_replace(",", "", $parameter)) > floatval(str_replace(",", "", $maximum))
+                      ) {
+                        $result = false;
                       }
                     }
                   }
                 }
               }
             }
+
+            return $result;
+
+          };
+
+          if (is_array($rules)) {
+            foreach ($rules as $rule) {
+              $result = $consolidate($rule);
+            }
+          } else {
+            $result = $consolidate($rules);
           }
+
         }
       }
     }
@@ -1202,60 +1397,77 @@ class Database {
     return $result;
   }
 
-  function columns($table, $override_connection = null, $override_allowed_keys = array()) {
-    if (count($override_allowed_keys)) {
-      return $override_allowed_keys;
-    } else {
-      if (!empty($table)) {
+  function get_reference($value, $table, $table_key) {
+    $result = $this->select(
+      $table, 
+      "*", 
+      array($table_key => $value), 
+      null, 
+      true,
+      false
+    );
+    return $result;
+  }
+
+  function columns($table, $override_connection = null) {
+    if (!empty($table)) {
+
+      $data = array();
   
-        $data = array();
-    
-        $connection = $override_connection;
-        if (empty($override_connection)) {
-          $connection = $this->connect();
-        }
-    
-        $sql = "
-        SELECT * from INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = '" . $this->config["database_name"] . "'
-        AND TABLE_NAME = '" . $table . "';";
-        
+      $connection = $override_connection;
+      if (empty($override_connection)) {
+        $connection = $this->connect();
+      }
+      if ($connection) {
+
         $error = false;
-        if ($connection) {
-          if ($result = mysqli_query($connection, $sql)) {
-            $queries = array();
-            while($query = $result->fetch_assoc()) {
-              array_push($queries, $query);
-            }
-            $data = $queries;
-            mysqli_free_result($result);
-          } else {
-            $error = true;
+  
+        $query = 
+        "SELECT * from INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = '" 
+        . $this->config["database_name"] . "' AND TABLE_NAME = '" . $table . "';";
+        
+        if ($result = mysqli_query($connection, $query)) {
+          $rows = array();
+          while($row = $result->fetch_assoc()) {
+            array_push($rows, $row);
           }
-          if (empty($override_connection)) {
-            $this->disconnect($connection);
-          }
+          $data = $rows;
+          mysqli_free_result($result);
         } else {
           $error = true;
         }
-      
-        if ($error) {
-          throw new Exception($this->translation->translate("Database encountered error"), 500);
+
+        if (empty($override_connection)) {
+          $this->disconnect($connection);
         }
-  
-        return $data;
-        
+    
+        if ($error) {
+          throw new Exception($this->translation->translate("Database encountered error"), 409);
+        }
+
       } else {
-        throw new Exception($this->translation->translate("Not found"), 404);
-        return null;
+        throw new Exception($this->translation->translate("Unable to connect to database"), 500);
       }
+
+      return $data;
+      
+    } else {
+      throw new Exception($this->translation->translate("Not found"), 404);
+      return null;
     }
   }
 
-  function clean($parameters, $allowed_keys) {
-    if (count($allowed_keys)) {
-      foreach($parameters as $key => $parameter) {
-        if (!in_array($key, $allowed_keys)) {
+  function allow($table) {
+    $columns = $this->columns($table);
+    if (!empty($columns)) {
+
+    }
+  }
+
+  function clean_parameters($parameters, $clean_keys) {
+    if (!empty($clean_keys)) {
+      foreach ($parameters as $key => $parameter) {
+        if (!in_array($key, $clean_keys)) {
           unset($parameters[$key]);
         }
       }
@@ -1263,7 +1475,75 @@ class Database {
     return $parameters;
   }
 
-  private function escape_string($parameters, $override_connection = null) {
+  function clean_filters($filters, $clean_keys) {
+    if (!empty($clean_keys)) {
+      foreach ($filters as $key => $filter) {
+        if (!in_array($key, $clean_keys)) {
+          unset($filters[$key]);
+        }
+      }
+    }
+    return $filters;
+  }
+
+  function clean_extensions($extensions, $clean_keys) {
+    if (!empty($clean_keys)) {
+      for ($i = 0; $i < count($extensions); $i++) {
+        if (isset($extensions[$i])) {
+          if (
+            isset($extensions[$i]["extensions"]) 
+            && is_array($extensions[$i]["extensions"])
+          ) {
+            $extensions[$i]["extensions"] = $this->clean_extensions($extensions[$i]["extensions"], $clean_keys);
+          } else {
+            $key = trim(trim($extensions[$i]["key"], "[]'`"), "\'");
+            if (!in_array($key, $clean_keys)) {
+              unset($extensions[$i]);
+            }
+          }
+        }
+      }
+    }
+    return $extensions;
+  }
+
+  function clean_controls($controls, $clean_keys) {
+    if (!empty($clean_keys)) {
+      if (!empty($controls) && is_array($controls)) {
+        foreach ($controls as $rules) {
+
+          $consolidate = function($rule, $clean_keys) {
+            $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")([A-Za-z_]+|<[A-Za-z_]+>)/";
+            if (preg_match($rule_pattern, $rule, $matches)) {
+              $key = "";
+              if (count($matches) === 3) {
+                $key = trim(trim($matches[0], "[]'`"), "\'");
+                if (!in_array($key, $clean_keys)) {
+                  return $key;
+                }
+              }
+            }
+          };
+
+          if (is_array($rules)) {
+            foreach ($rules as $rule) {
+              if ($key = $consolidate($rule, $clean_keys)) {
+                unset($controls[$key]);
+              }
+            }
+          } else {
+            if ($key = $consolidate($rules, $clean_keys)) {
+              unset($controls[$key]);
+            }
+          }
+
+        }
+      }
+    }
+    return $controls;
+  }
+
+  function escape_string($parameters, $override_connection = null) {
     $connection = $override_connection;
     if (empty($override_connection)) {
       $connection = $this->connect();
@@ -1271,7 +1551,7 @@ class Database {
     if ($connection) {
       if (isset($parameters) && !empty($parameters)) {
         if (is_array($parameters)) {
-          foreach($parameters as $key => $value) {
+          foreach ($parameters as $key => $value) {
             if (!empty($value)) {
               $parameters[$key] = $this->escape_string($value, $connection);
             }

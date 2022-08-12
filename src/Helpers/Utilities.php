@@ -8,46 +8,25 @@ use Exception;
 
 class Utilities {
 
-  function generate_link($text) {
-	
-    $text = strip_tags($text);
-    // Preserve escaped octets.
-    $text = preg_replace('|%([a-fA-F0-9][a-fA-F0-9])|', '---$1---', $text);
-    // Remove percent signs that are not part of an octet.
-    $text = str_replace('%', '', $text);
-    // Restore octets.
-    $text = preg_replace('|---([a-fA-F0-9][a-fA-F0-9])---|', '%$1', $text);
-  
-    if ($this->is_utf8($text)) {
-      if (function_exists('mb_strtolower')) {
-        $text = mb_strtolower($text, 'UTF-8');
-      }
-      $text = $this->utf8_url_encode($text, 1000);
-    }
-  
-    $text = strtolower($text);
-    $text = preg_replace('/&.+?;/', '', $text); // kill entities
-    $text = str_replace('.', '-', $text);
-    $text = preg_replace('/[^%a-z0-9 _-]/', '', $text);
-    $text = preg_replace('/\s+/', '-', $text);
-    $text = preg_replace('|-+|', '-', $text);
-    $text = trim($text, '-');
-  
-    return urldecode($text);
-    
-  }
+  public static function handle_request() {
 
-  public static function format_request() {
+    $rest_parameters = array(
+      "m", // Module key
+      "f", // Function name
+      "a", // Authorization code (User token)
+      "t", // API token
+      "l", // Expected response language
+      "h", // Hash for Lock
+      "v" // Version (Timestamp)
+    );
 
     $arrange = function($value) {
       $parameters = null;
       if (isset($value)) {
-        if (is_string($value)) {
-          if (is_array(json_decode($value, true))) {
-            $parameters = json_decode($value, true);
-          } else {
-            $parameters = $value;
-          }
+        if (is_string($value) && is_array(json_decode($value, true))) {
+          $parameters = json_decode($value, true);
+        } else {
+          $parameters = $value;
         }
         return $parameters;
       } else {
@@ -56,69 +35,126 @@ class Utilities {
     };
 
     $get = array();
-    if (isset($_GET) && count($_GET)) {
-      foreach($_GET as $key => $value) {
-        $get[$key] = $arrange($value);
+    if (isset($_REQUEST) && !empty($_REQUEST)) {
+      foreach ($_REQUEST as $key => $value) {
+        if (!in_array($key, $rest_parameters)) {
+          $get[$key] = $arrange($value);
+        } else {
+          unset($get[$key]);
+        }
       }
-      unset($get["module"]);
-      unset($get["function"]);
     }
 
     $post = array();
-    if (isset($_POST) && count($_POST)) {
-      foreach($_POST as $key => $value) {
-        $post[$key] = $arrange($value);
-      }
-    }
-
-    $put = array();
-    if (isset($_PUT) && count($_PUT)) {
-      foreach($_PUT as $key => $value) {
-        $put[$key] = $arrange($value);
-      }
-    }
-
-    $patch = array();
-    if (isset($_PATCH) && count($_PATCH)) {
-      foreach($_PATCH as $key => $value) {
-        $patch[$key] = $arrange($value);
-      }
-    }
-
-    $delete = array();
-    if (isset($_DELETE) && count($_DELETE)) {
-      foreach($_DELETE as $key => $value) {
-        $delete[$key] = $arrange($value);
+    if (isset($_POST) && !empty($_POST)) {
+      foreach ($_POST as $key => $value) {
+        if (!in_array($key, $rest_parameters)) {
+          $post[$key] = $arrange($value);
+        } else {
+          unset($post[$key]);
+        }
       }
     }
 
     /* merge/override body json to post/put/patch/delete for request */
     $json = array();
     $json_body = json_decode(file_get_contents("php://input"), true);
-    if ($json_body) {
-      foreach($json_body as $key => $value) {
+    if (!empty($json_body)) {
+      foreach ($json_body as $key => $value) {
         $json[$key] = $arrange($value);
       }
     }
     
-    return array(
-      "get" => $get,
-      "post" => ($_SERVER["REQUEST_METHOD"] === "POST" ? array_merge($post, $json) : null),
-      "put" => ($_SERVER["REQUEST_METHOD"] === "PUT" ? array_merge($put, $json) : null),
-      "patch" => ($_SERVER["REQUEST_METHOD"] === "PATCH" ? array_merge($patch, $json) : null),
-      "delete" => ($_SERVER["REQUEST_METHOD"] === "DELETE" ? array_merge($delete, $json) : null)
-    );
+    $data = array();
+    if (
+      empty($json) 
+      && (
+        $_SERVER["REQUEST_METHOD"] == "PUT" 
+        || $_SERVER["REQUEST_METHOD"] == "PATCH"
+      )
+    ) {
+      // Fetch content and determine boundary
+      $raw_data = file_get_contents('php://input');
+      if (!empty($raw_data)) {
+        $boundary = substr($raw_data, 0, strpos($raw_data, "\r\n"));
+
+        if (!empty($boundary)) {
+          // Fetch each part
+          $parts = array_slice(explode($boundary, $raw_data), 1);
+      
+          foreach ($parts as $part) {
+            
+            // If this is the last part, break
+            if ($part == "--\r\n") break; 
+      
+            // Separate content from headers
+            $part = ltrim($part, "\r\n");
+            list($raw_headers, $body) = explode("\r\n\r\n", $part, 2);
+      
+            // Parse the headers list
+            $raw_headers = explode("\r\n", $raw_headers);
+            $headers = array();
+            foreach ($raw_headers as $header) {
+              list($name, $value) = explode(':', $header);
+              $headers[strtolower($name)] = ltrim($value, ' '); 
+            } 
+      
+            // Parse the Content-Disposition to get the field name, etc.
+            if (isset($headers['content-disposition'])) {
+              $filename = null;
+              preg_match(
+                '/^(.+); *name="([^"]+)"(; *filename="([^"]+)")?/', 
+                $headers['content-disposition'], 
+                $matches
+              );
+              list(, $type, $name) = $matches;
+              isset($matches[4]) and $filename = $matches[4]; 
+      
+              // handle your fields here
+              switch ($name) {
+                // this is a file upload
+                case 'userfile':
+                  file_put_contents($filename, $body);
+                  break;
+      
+                // default for all other files is to populate $data
+                default: 
+                  $data[$name] = substr($body, 0, strlen($body) - 2);
+                  break;
+              } 
+            }
+
+          }
+        }
+        
+      }
+
+    }
+    
+    return array_merge($get, $post, $json, $data);
 
   }
 
-  public static function get_headers_all() {
+  public static function handle_response($result) {
+    $translation = new Translation();
+    if (is_null($result) || (is_bool($result) && $result === false)) {
+      throw new Exception($translation->translate("Unknown error"), 409);
+    }
+    if (!is_array($result) && !is_object($result)) {
+      return json_encode(array("result" => $result), JSON_UNESCAPED_UNICODE);
+    } else {
+      return json_encode($result, JSON_UNESCAPED_UNICODE);
+    }
+  }
+
+  public static function get_all_headers() {
     $headers = array();
     if (function_exists("getallheaders")) {
       $headers = getallheaders();
     } else if (function_exists("apache_request_headers")) {
       $headers = apache_request_headers();
     } else {
-      foreach($_SERVER as $name => $value) {
+      foreach ($_SERVER as $name => $value) {
         if (substr($name, 0, 5) == 'HTTP_') {
           $headers[str_replace(' ', '-', ucwords(strtolower(str_replace('_', ' ', substr($name, 5)))))] = $value;
         }
@@ -127,27 +163,19 @@ class Utilities {
     return $headers;
   }
 
-  public static function length($string) {
-    if (function_exists("mb_strlen")) {
-      return mb_strlen($string);
-    } else {
-      return strlen($string);
-    }
-  }
-
-  public static function handle_response($result) {
-    $translation = new Translation();
-    if (is_null($result) || $result == false) {
-      throw new Exception($translation->translate("Unknown errors"), 400);
-    }
-    if (is_null($result) || is_bool($result)) {
-      return json_encode(array("result" => $result));
-    } else {
-      return json_encode($result);
-    }
-  }
-
   public static function override_controls($view = false, $create = false, $update = false, $delete = false) {
+    if (is_null($view)) {
+      $view = false;
+    }
+    if (is_null($create)) {
+      $create = false;
+    }
+    if (is_null($update)) {
+      $update = false;
+    }
+    if (is_null($delete)) {
+      $delete = false;
+    }
     return array(
       "view" => $view,
       "create" => $create,
@@ -156,232 +184,15 @@ class Utilities {
     );
   }
 
-  public static function get_class_name($key) {
-    if (!empty($key)) {
-      $parts = explode("_", $key);
-      $formats = array();
-      foreach($parts as $part) {
-        array_push($formats, ucfirst($part));
-      }
-      $parts = explode("-", implode("", $formats));
-      $formats = array();
-      foreach($parts as $part) {
-        array_push($formats, ucfirst($part));
-      }
-      return implode("", $formats);
-    } else {
-      return null;
+  public static function backtrace($origin = "") {
+    if (empty($origin)) {
+      $origin = getcwd();
     }
-  }
-
-  public static function sync_module($config, $database_table) {
-    if (!empty($database_table)) {
-      $database = new Database($config);
-      $filters = array(
-        "database_table" => $database_table
-      );
-      $module_data = $database->select(
-        "module", 
-        "*", 
-        $filters, 
-        null, 
-        true
-      );
-      if (!empty($module_data) && isset($module_data->default_control)) {
-        $module_data->default_control = explode(",", $module_data->default_control);
-      } else {
-        $module_data->default_control = array();
-      }
-      return $module_data;
-    } else {
-      return null;
-    }
-  }
-
-  public static function sync_control(
-    $module_id, 
-    $session, 
-    $controls,
-    $module = null
-  ) {
-    if (!$controls) {
-      $controls = array(
-        "view" => false,
-        "create" => false,
-        "update" => false,
-        "delete" => false
-      );
-    }
-    if (isset($session) && isset($session->controls) && count($session->controls)) {
-      if (isset($session->controls[$module_id])) {
-        foreach($controls as $key => $value) {
-          if (empty($value)) {
-            $controls[$key] = $session->controls[$module_id][$key];
-          }
-        }
-      }
-    }
-    if (!empty($module) && isset($module->default_control)) {
-      foreach($module->default_control as $key => $value) {
-        if (empty($value)) {
-          $controls[$key] = true;
-        }
-      }
-    }
-    return $controls;
-  }
-  
-  public static function generate_thumbnail($source, $destination, $target_width, $target_height = null, $aspectratio = true, $quality = 100) {
-
-    $image_handlers = array(
-      "IMAGETYPE_JPEG" => array(
-        'load' => 'imagecreatefromjpeg',
-        'save' => 'imagejpeg',
-        'quality' => 100
-      ),
-      "IMAGETYPE_PNG" => array(
-        'load' => 'imagecreatefrompng',
-        'save' => 'imagepng',
-        'quality' => 0
-      ),
-      "IMAGETYPE_GIF" => array(
-        'load' => 'imagecreatefromgif',
-        'save' => 'imagegif'
-      )
-    );    
-    
-    // 1. Load the image from the given $source
-    // - see if the file actually exists
-    // - check if it's of a valid image type
-    // - load the image resource
-  
-    // get the type of the image
-    // we need the type to determine the correct loader
-    $info = getimagesize($source);
-    if ($info["mime"] == "image/png") {
-      $type = "IMAGETYPE_PNG";
-    } else if ($info["mime"] == "image/gif") {
-      $type = "IMAGETYPE_GIF";
-    } else if ($info["mime"] == "image/jpeg") {
-      $type = "IMAGETYPE_JPEG";
-    }
-  
-    // if no valid type or no handler found -> exit
-    if (!isset($type) || !isset($image_handlers[$type])) {
-      return null;
-    }
-    
-    // load the image with the correct loader
-    $image = call_user_func($image_handlers[$type]['load'], $source);
-  
-  
-    // no image found at supplied location -> exit
-    if (!isset($image)) {
-      return null;
-    }
-  
-  
-    // 2. Create a thumbnail and resize the loaded $image
-    // - get the image dimensions
-    // - define the output size appropriately
-    // - create a thumbnail based on that size
-    // - set alpha transparency for GIFs and PNGs
-    // - draw the final thumbnail
-  
-    // get original image width and height
-    $width = imagesx($image);
-    $height = imagesy($image);
-  
-    // maintain aspect ratio when no height set
-    if ($target_height == null) {
-  
-        // get width to height ratio
-        $ratio = $width / $height;
-  
-        // if is portrait
-        // use ratio to scale height to fit in square
-        if ($width > $height) {
-          $target_height = floor($target_width / $ratio);
-        }
-        // if is landscape
-        // use ratio to scale width to fit in square
-        else {
-          $target_height = $target_width;
-          $target_width = floor($target_width * $ratio);
-        }
-    }
-  
-    // create duplicate image based on calculated target size
-    $thumbnail = imagecreatetruecolor($target_width, $target_height);
-    
-    // set transparency options for GIFs and PNGs
-    if ($type == "IMAGETYPE_GIF" || $type == "IMAGETYPE_PNG") {
-  
-      // make image transparent
-      imagecolortransparent(
-        $thumbnail,
-        imagecolorallocate($thumbnail, 0, 0, 0)
-      );
-      $quality = "";
-  
-      // additional settings for PNGs
-      if ($type == "IMAGETYPE_PNG") {
-        imagealphablending($thumbnail, false);
-        imagesavealpha($thumbnail, true);
-        $quality = 0;
-      }
-    }
-    
-    // copy entire source image to duplicate image and resize
-    if ($aspectratio == true) {
-      if ($width/$height > $target_width/$target_height) {
-        $target_width_temp = round($width*($target_height/$height));
-        $target_height_temp = $target_height;
-        $target_width_temp_re = round($target_width*($height/$target_height));
-        $target_height_temp_re = $height;
-        $image_Crop_thumbnail_x = round(($width - $target_width_temp_re)/2);
-        $image_Crop_thumbnail_y = 0;
-      } else if ($width/$height < $target_width/$target_height) {
-        $target_width_temp = $target_width;
-        $target_height_temp = round($height*($target_width/$width));
-        $target_width_temp_re = $width;
-        $target_height_temp_re = round($target_height*($width/$target_width));
-        $image_Crop_thumbnail_x = 0;
-        $image_Crop_thumbnail_y = round(($height - $target_height_temp_re)/2);
-      } else {
-        $target_width_temp = $target_width;
-        $target_height_temp = $target_height;
-        $image_Crop_thumbnail_x = 0;
-        $image_Crop_thumbnail_y = 0;
-      }
-      imagecopyresampled(
-        $thumbnail, 
-        $image, 0, 0, $image_Crop_thumbnail_x, $image_Crop_thumbnail_y, 
-        $target_width_temp, $target_height_temp, 
-        $width, $height
-      );
-    } else {
-      imagecopyresampled(
-        $thumbnail,
-        $image,
-        0, 0, 0, 0,
-        $target_width, $target_height,
-        $width, $height
-      );
-    }
-  
-    // 3. Save the $thumbnail to disk
-    // - call the correct save method
-    // - set the correct quality level
-  
-    // save the duplicate version of the image to disk
-    return call_user_func(
-      $image_handlers[$type]['save'],
-      $thumbnail,
-      $destination,
-      $quality
-    );
-  
+    $base_path = rtrim(str_replace("vendor/abstracts/core/src/Helpers", "", __DIR__), "/");
+    $path = str_replace($base_path, "", $origin);
+    $backtrace = "";
+    for ($i = 0; $i < count(explode("/", $path)); $i++) $i > 0 ? $backtrace .= "../" : $backtrace .= "";
+    return $backtrace;
   }
 
   public static function get_thumbnail($path) {
@@ -396,71 +207,357 @@ class Utilities {
     return $directory_path . "large/" . $file_path;
   }
 
-  public static function is_utf8($str) {
-    $length = strlen($str);
+  public static function create_class_name($key) {
+    if (!empty($key)) {
+      $parts = explode("_", $key);
+      $formats = array();
+      foreach ($parts as $part) {
+        array_push($formats, ucfirst($part));
+      }
+      $parts = explode("-", implode("", $formats));
+      $formats = array();
+      foreach ($parts as $part) {
+        array_push($formats, ucfirst($part));
+      }
+      return implode("", $formats);
+    } else {
+      return null;
+    }
+  }
+
+  public static function create_link($text) {
+	
+    $text = strip_tags($text);
+    $text = preg_replace('|%([a-fA-F0-9][a-fA-F0-9])|', '---$1---', $text);
+    $text = str_replace('%', '', $text);
+    $text = preg_replace('|---([a-fA-F0-9][a-fA-F0-9])---|', '%$1', $text);
+  
+    $is_utf8 = true;
+    $length = strlen($text);
     for ($i=0; $i < $length; $i++) {
-        $c = ord($str[$i]);
+        $c = ord($text[$i]);
         if ($c < 0x80) $n = 0; # 0bbbbbbb
         elseif (($c & 0xE0) == 0xC0) $n=1; # 110bbbbb
         elseif (($c & 0xF0) == 0xE0) $n=2; # 1110bbbb
         elseif (($c & 0xF8) == 0xF0) $n=3; # 11110bbb
         elseif (($c & 0xFC) == 0xF8) $n=4; # 111110bb
         elseif (($c & 0xFE) == 0xFC) $n=5; # 1111110b
-        else return false; # Does not match any model
+        else $is_utf8 = false; # Does not match any model
         for ($j=0; $j<$n; $j++) { # n bytes matching 10bbbbbb follow ?
-            if ((++$i == $length) || ((ord($str[$i]) & 0xC0) != 0x80))
-                return false;
+          if ((++$i == $length) || ((ord($text[$i]) & 0xC0) != 0x80)) {
+            $is_utf8 = false;
+          }
         }
     }
-    return true;
-  }
-
-  public static function utf8_url_encode($utf8_string, $length = 0 ) {
-
-    $unicode = '';
-    $values = array();
-    $num_octets = 1;
-    $unicode_length = 0;
-  
-    $string_length = strlen( $utf8_string );
-    for ($i = 0; $i < $string_length; $i++ ) {
-  
-      $value = ord( $utf8_string[ $i ] );
-  
-      if ( $value < 128 ) {
-        if ( $length && ( $unicode_length >= $length ) )
-          break;
-        $unicode .= chr($value);
-        $unicode_length++;
+    if ($is_utf8) {
+      if (function_exists('mb_strtolower')) {
+        $text = mb_strtolower($text, 'UTF-8');
       } else {
-          if ( count( $values ) == 0 ) $num_octets = ( $value < 224 ) ? 2 : 3;
-  
-          $values[] = $value;
-  
-          if ( $length && ( $unicode_length + ($num_octets * 3) ) > $length )
-              break;
-          if ( count( $values ) == $num_octets ) {
-              if ($num_octets == 3) {
-                  $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]) . '%' . dechex($values[2]);
-                  $unicode_length += 9;
-              } else {
-                  $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]);
-                  $unicode_length += 6;
-              }
-  
-              $values = array();
-              $num_octets = 1;
-          }
+        $text = strtolower($text);
       }
-  
+      $unicode = '';
+      $values = array();
+      $num_octets = 1;
+      $unicode_length = 0;
+      $string_length = strlen($text);
+      $length = 1000;
+      for ($s = 0; $s < $string_length; $s++) {
+        $value = ord($text[$s]);
+        if ($value < 128) {
+          if ($length && ($unicode_length >= $length)) 
+            break;
+          $unicode .= chr($value);
+          $unicode_length++;
+        } else {
+          if (count($values ) == 0) $num_octets = ($value < 224) ? 2 : 3;
+          $values[] = $value;
+          if ($length && ($unicode_length + ($num_octets * 3)) > $length)
+            break;
+          if (count($values) == $num_octets) {
+            if ($num_octets == 3) {
+              $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]) . '%' . dechex($values[2]);
+              $unicode_length += 9;
+            } else {
+              $unicode .= '%' . dechex($values[0]) . '%' . dechex($values[1]);
+              $unicode_length += 6;
+            }
+            $values = array();
+            $num_octets = 1;
+          }
+        }
+      }
     }
   
-    return $unicode;
+    $text = strtolower($text);
+    $text = preg_replace('/&.+?;/', '', $text); // kill entities
+    $text = str_replace('.', '-', $text);
+    $text = preg_replace('/[^%a-z0-9 _-]/', '', $text);
+    $text = preg_replace('/\s+/', '-', $text);
+    $text = preg_replace('|-+|', '-', $text);
+    $text = trim($text, '-');
+  
+    return urldecode($text);
+    
+  }
+
+  public static function create_files_from_url($url = null, $multiple = false) {
+    if (!empty($url)) {
+
+      $get_info = function ($url) {
+        $data = null;
+        $curl = curl_init($url);
+        curl_setopt($curl, CURLOPT_NOBODY, 1);
+        curl_setopt($curl, CURLOPT_HEADER, 1);
+        curl_setopt($curl, CURLOPT_FOLLOWLOCATION, true);
+        curl_setopt($curl, CURLOPT_RETURNTRANSFER, true);
+        curl_exec($curl);
+        $data = array(
+          "type" => curl_getinfo($curl, CURLINFO_CONTENT_TYPE),
+          "size" => curl_getinfo($curl, CURLINFO_CONTENT_LENGTH_DOWNLOAD),
+        );
+        curl_close($curl);
+        return $data;
+      };
+
+      if ($multiple === true) {
+        $urls = array_map(function($url) { return trim($url); }, explode(",", trim($url)));
+        $types = array();
+        $sizes = array();
+        foreach ($urls as $url) {
+          $info = $get_info($url);
+          array_push($types, $info["type"]);
+          array_push($sizes, $info["size"]);
+        }
+        $names = array_map(function($url) { return basename(trim($url)); }, $urls);
+        $types = $types;
+        $errors = array_map(function() { return 0; }, $urls);
+        $size = $sizes;
+        $tmp_names = $urls;
+        return array(
+          "name" => $names,
+          "type" => $types,
+          "tmp_name" => $tmp_names,
+          "error" => $errors,
+          "size" => $size
+        );
+      } else {
+        $info = $get_info($url);
+        return array(
+          "name" => basename(trim($url)),
+          "type" => $info["type"],
+          "tmp_name" => trim($url),
+          "error" => 0,
+          "size" => $info["size"],
+        );
+      }
+    } else {
+      return null;
+    }
+  }
+  
+  public static function create_image(
+    $source, 
+    $destination, 
+    $resize = false,
+    $target_width, 
+    $target_height = null, 
+    $aspectratio = true, 
+    $quality = 75,
+    $override_type = null
+  ) {
+
+    $translation = new Translation();
+
+    if (!empty($resize)) {
+      $resize = true;
+      if (!empty($aspectratio)) {
+        $aspectratio = true;
+      }
+    }
+    if (empty($quality)) {
+      $quality = 75;
+    }
+
+    $image_handlers = array(
+      "JPEG" => array(
+        "load" => "imagecreatefromjpeg",
+        "save" => "imagejpeg"
+      ),
+      "PNG" => array(
+        "load" => "imagecreatefrompng",
+        "save" => "imagepng"
+      ),
+      "GIF" => array(
+        "load" => "imagecreatefromgif",
+        "save" => "imagegif"
+      ),
+      "WEBP" => array(
+        "load" => "imagecreatefromwebp",
+        "save" => "imagewebp"
+      )
+    );
+
+    $info = getimagesize($source);
+    if ($info["mime"] == "image/jpeg") {
+      $type = "JPEG";
+    } else if ($info["mime"] == "image/png") {
+      $type = "PNG";
+    } else if ($info["mime"] == "image/gif") {
+      $type = "GIF";
+    } else if ($info["mime"] == "image/webp") {
+      $type = "WEBP";
+    }
+    if (!empty($override_type)) {
+      if ($override_type == "image/jpeg") {
+        $image_handlers[$type]["save"] = "imagejpeg";
+      } else if ($override_type == "image/png") {
+        $image_handlers[$type]["save"] = "imagepng";
+      } else if ($override_type == "image/gif") {
+        $image_handlers[$type]["save"] = "imagegif";
+      } else if ($override_type == "image/webp") {
+        $image_handlers[$type]["save"] = "imagewebp";
+      }
+    }
+  
+    if (!isset($type) || !isset($image_handlers[$type])) {
+      throw new Exception($translation->translate("Unsupported image"), 415);
+    }
+    
+    if (function_exists($image_handlers[$type]["load"])) {
+      $image = call_user_func($image_handlers[$type]["load"], $source);
+      if (!isset($image)) {
+        throw new Exception($translation->translate("Unable to create image"), 409);
+      }
+    } else {
+      throw new Exception("'" . $image_handlers[$type]["load"] . "' " . $translation->translate("does not exist"), 500);
+    }
+      
+    $width = imagesx($image);
+    $height = imagesy($image);
+
+    if ($type == "PNG" && (empty($override_type) || $override_type == "image/png")) {
+      $quality = intval($quality / 10);
+    } else if ($type == "GIF" && (empty($override_type) || $override_type == "image/gif")) {
+      $quality = "";
+    }
+
+    if ($resize) {
+    
+      if ($target_height == null) {
+        $ratio = $width / $height;
+        if ($width > $height) {
+          $target_height = floor($target_width / $ratio);
+        } else {
+          $target_height = $target_width;
+          $target_width = floor($target_width * $ratio);
+        }
+      }
+    
+      $truecolor = imagecreatetruecolor($target_width, $target_height);
+      if ($type == "GIF" || $type == "PNG") {
+        imagecolortransparent(
+          $truecolor,
+          imagecolorallocate($truecolor, 255, 255, 255)
+        );
+        if ($type == "PNG" && (empty($override_type) || $override_type == "image/png")) {
+          imagealphablending($truecolor, false);
+          imagesavealpha($truecolor, true);
+        }
+      }
+      
+      if ($aspectratio === true) {
+        if ($width/$height > $target_width / $target_height) {
+          $destination_width = round($width * ($target_height / $height));
+          $destination_height = $target_height;
+          $compare = round($target_width * ($height / $target_height));
+          $offset_x = round(($width - $compare) / 2);
+          $offset_y = 0;
+        } else if ($width/$height < $target_width / $target_height) {
+          $destination_width = $target_width;
+          $destination_height = round($height * ($target_width / $width));
+          $compare = round($target_height * ($width / $target_width));
+          $offset_x = 0;
+          $offset_y = round(($height - $compare) / 2);
+        } else {
+          $destination_width = $target_width;
+          $destination_height = $target_height;
+          $offset_x = 0;
+          $offset_y = 0;
+        }
+        imagecopyresampled(
+          $truecolor, 
+          $image, 
+          0, 
+          0, 
+          $offset_x, 
+          $offset_y, 
+          $destination_width, 
+          $destination_height, 
+          $width, 
+          $height
+        );
+      } else {
+        imagecopyresampled(
+          $truecolor,
+          $image,
+          0, 
+          0, 
+          0, 
+          0,
+          $target_width, 
+          $target_height,
+          $width, $height
+        );
+      }
+
+    } else {
+    
+      $truecolor = imagecreatetruecolor($width, $height);
+      if ($type == "GIF" || $type == "PNG") {
+        imagecolortransparent(
+          $truecolor,
+          imagecolorallocate($truecolor, 255, 255, 255)
+        );
+        if ($type == "PNG" && (empty($override_type) || $override_type == "image/png")) {
+          imagealphablending($truecolor, false);
+          imagesavealpha($truecolor, true);
+        }
+      }
+
+      imagecopyresampled(
+        $truecolor, 
+        $image, 
+        0, 
+        0, 
+        0, 
+        0, 
+        $width, 
+        $height, 
+        $width, 
+        $height
+      );
+
+    }
+
+    if (function_exists($image_handlers[$type]["save"])) {
+      return call_user_func(
+        $image_handlers[$type]["save"],
+        $truecolor,
+        $destination,
+        $quality
+      );
+    } else {
+      throw new Exception("'" . $image_handlers[$type]["save"] . "' " . $translation->translate("does not exist"), 500);
+    }
   
   }
 
-  public static function is_base64($string) {
-    return (bool) preg_match('/^[a-zA-Z0-9\/\r\n+]*={0,2}$/', $string);
+  public static function length($string) {
+    if (function_exists("mb_strlen")) {
+      return mb_strlen($string);
+    } else {
+      return strlen($string);
+    }
   }
 
 }
