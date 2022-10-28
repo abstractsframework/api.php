@@ -10,6 +10,8 @@ use \Abstracts\Helpers\Encryption;
 
 use \Abstracts\API;
 use \Abstracts\Device;
+use \Abstracts\Group;
+use \Abstracts\Log;
 
 use Exception;
 
@@ -37,6 +39,7 @@ class User {
   private $api = null;
   private $device = null;
   private $control = null;
+  private $log = null;
 
   function __construct(
     $session = null,
@@ -64,6 +67,9 @@ class User {
       Utilities::override_controls(true, true, true, true)
     );
     $this->control = new Control($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->log = new Log($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
 
@@ -121,7 +127,11 @@ class User {
           (isset($parameters["extensions"]) ? $parameters["extensions"] : null)
         );
       } else if ($function == "create") {
-        $result = $this->$function($parameters);
+        $result = $this->$function(
+          $parameters, 
+          null,
+          (isset($parameters["groups"]) ? $parameters["groups"] : null)
+        );
       } else if ($function == "update") {
         $result = $this->$function(
           (isset($parameters["id"]) ? $parameters["id"] : null),
@@ -301,6 +311,15 @@ class User {
                 false
               )
             ) {
+              $this->log->log(
+                __FUNCTION__,
+                __METHOD__,
+                "low",
+                func_get_args(),
+                (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                "id",
+                $data->id
+              );
               return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
             } else {
               return null;
@@ -409,6 +428,15 @@ class User {
             false
           )
         ) {
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "low",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $user_id
+          );
           $result = true;
         }
       } else {
@@ -624,6 +652,15 @@ class User {
                       false
                     )
                   ) {
+                    $this->log->log(
+                      __FUNCTION__,
+                      __METHOD__,
+                      "low",
+                      func_get_args(),
+                      (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                      "id",
+                      $data->id
+                    );
                     return $this->callback(__METHOD__, func_get_args(), $this->format($data, false, true));
                   } else {
                     $this->database->delete(
@@ -643,6 +680,15 @@ class User {
                     return false;
                   }
                 } else {
+                  $this->log->log(
+                    __FUNCTION__,
+                    __METHOD__,
+                    "low",
+                    func_get_args(),
+                    (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                    "id",
+                    $data->id
+                  );
                   return $this->callback(__METHOD__, func_get_args(), $this->format($data, false, true));
                 }
               } else {
@@ -666,6 +712,15 @@ class User {
               return false;
             }
           } else {
+            $this->log->log(
+              __FUNCTION__,
+              __METHOD__,
+              "low",
+              func_get_args(),
+              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+              "id",
+              $data->id
+            );
             return $this->callback(__METHOD__, func_get_args(), $this->format($data, false, true));
           }
         } else {
@@ -705,6 +760,15 @@ class User {
         $this->controls["view"]
       );
       if (!empty($data)) {
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
       } else {
         return null;
@@ -735,6 +799,11 @@ class User {
     $extensions = Initialize::extensions($extensions);
     $return_references = Initialize::return_references($return_references);
     
+    if (!empty($filters) && isset($filters["groups"])) {
+      $groups = $filters["groups"];
+      unset($filters["groups"]);
+    }
+
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
@@ -742,22 +811,106 @@ class User {
       if (isset($active)) {
         $filters["active"] = $active;
       }
-      $list = $this->database->select_multiple(
-        "user", 
-        "*", 
-        $filters, 
-        $extensions, 
-        $start, 
-        $limit, 
-        $sort_by, 
-        $sort_direction, 
-        $this->controls["view"]
-      );
+      $list = array();
+      if (empty($groups)) {
+
+        $list = $this->database->select_multiple(
+          "user", 
+          "*", 
+          $filters, 
+          $extensions, 
+          $start, 
+          $limit, 
+          $sort_by, 
+          $sort_direction, 
+          $this->controls["view"]
+        );
+
+      } else {
+    
+        $start = !empty($start) ? $start : null;
+        $limit = !empty($limit) ? $limit : null;
+        $sort_by = !empty($sort_by) ? $sort_by : "id";
+        $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
+        $active = !empty($active) ? $active : null;
+        $filters = is_array($filters) ? $filters : array();
+        $extensions = is_array($extensions) ? $extensions : array();
+        $fetch_type = !empty($fetch_type) ? $fetch_type : "assoc";
+        $controls_view = !empty($controls_view) ? $controls_view : false;
+        $controls = $this->controls["view"];
+        
+        if (!empty($controls)) {
+    
+          $connection = $this->database->connect();
+          if ($connection) {
+            
+            $error = false;
+    
+            $start = $this->database->escape_string($start, $connection);
+            $limit = $this->database->escape_string($limit, $connection);
+            $sort_by = $this->database->escape_string($sort_by, $connection);
+            $sort_direction = $this->database->escape_string($sort_direction, $connection);
+    
+            $conditions = $this->database->condition(
+              $this->database->escape_string($filters, $connection), 
+              $this->database->escape_string($extensions, $connection), 
+              $this->database->escape_string($controls, $connection),
+              "user"
+            );
+    
+            $query = 
+            "SELECT `user`.* FROM `user` 
+            LEFT JOIN `member` ON (`user`.`id` = `member`.`user`) 
+            " . (!empty($conditions) ? $conditions . " AND " : "") .
+            "(" . implode(" OR ", array_map(function ($group_id) { return  "`member`.`group_id` = '" . $group_id . "'"; }, $groups)) . ") 
+            GROUP BY `user`.`id` "
+            . $this->database->order($sort_by, $sort_direction) . " " . $this->database->limit($start, $limit) . ";";
+            if ($result = mysqli_query($connection, $query)) {
+              $rows = array();
+              if ($fetch_type == "assoc") {
+                while($row = $result->fetch_assoc()) {
+                  array_push($rows, (object) $row);
+                }
+              } else {
+                while($row = $result->fetch_array()) {
+                  array_push($rows, (object) $row);
+                }
+              }
+              $list = $rows;
+              mysqli_free_result($result);
+            } else {
+              $error = true;
+            }
+    
+            $this->database->disconnect($connection);
+    
+            if ($error) {
+              throw new Exception($this->translation->translate("Database encountered error"), 409);
+            }
+    
+          } else {
+            throw new Exception($this->translation->translate("Unable to connect to database"), 500);
+          }
+    
+        } else {
+          throw new Exception($this->translation->translate("Permission denied"), 403);
+        }
+
+      }
       if (!empty($list)) {
         $data = array();
         foreach ($list as $value) {
           array_push($data, $this->format($value, $return_references));
         }
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          null,
+          null
+        );
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
         return array();
@@ -807,19 +960,29 @@ class User {
     }
   }
 
-  function create($parameters, $user_id = 0) {
+  function create($parameters, $user_id = 0, $groups) {
       
     /* initialize: parameters */
     $parameters = $this->inform($parameters, false, $user_id);
+    if (!isset($parameters["username"]) || empty($parameters["username"])) {
+      $parameters["username"] = $this->random_username();
+    }
 
     if ($this->validate($parameters)) {
+
+      if (!empty($groups)) {
+        $groups = (!is_array($groups) ? explode(",", $groups) : $groups);
+      }
     
       unset($parameters["confirm_password"]);
+      unset($parameters["groups"]);
       $parameters["password"] = hash("sha256", md5($parameters["password"] . $this->config["password_salt"]));
       $parameters["email_verified"] = 0;
       $parameters["phone_verified"] = 0;
       $parameters["ndid_verified"] = 0;
       $parameters["face_verified"] = 0;
+
+      $error = false;
 
       $data = $this->database->insert(
         "user", 
@@ -830,11 +993,73 @@ class User {
         if (!empty($_FILES)) {
           // $this->upload($data->id, $_FILES);
         }
-        return $this->callback(
-          __METHOD__, 
-          func_get_args(), 
-          $this->format($data)
-        );
+        if (!empty($groups)) {
+
+          $errors = array();
+
+          $group = new Group(
+            $this->session, 
+            Utilities::override_controls(
+              $this->controls["create"], 
+              $this->controls["create"], 
+              $this->controls["create"], 
+              $this->controls["create"]
+            )
+          );
+
+          foreach ($groups as $group_id) {
+            try {
+              $group->add_member($group_id, $data->id);
+            } catch (Exception $e) {
+              array_push($errors, $group_id);
+            }
+          }
+
+          if (empty($errors)) {
+            if (!$error || empty($_FILES)) {
+              $this->log->log(
+                __FUNCTION__,
+                __METHOD__,
+                "normal",
+                func_get_args(),
+                (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                "id",
+                $data->id
+              );
+              return $this->callback(
+                __METHOD__, 
+                func_get_args(), 
+                $this->format($data)
+              );
+            } else {
+              throw new Exception($this->translation->translate("Unable to upload"), 409);
+            }
+          } else {
+            throw new Exception($this->translation->translate("Unable to add member") . " '" . implode("', '", $errors) . "'", 409);
+          }
+
+        } else {
+
+          if (!$error || empty($_FILES)) {
+            $this->log->log(
+              __FUNCTION__,
+              __METHOD__,
+              "normal",
+              func_get_args(),
+              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+              "id",
+              $data->id
+            );
+            return $this->callback(
+              __METHOD__, 
+              func_get_args(), 
+              $this->format($data)
+            );
+          } else {
+            throw new Exception($this->translation->translate("Unable to upload"), 409);
+          }
+
+        }
       } else {
         return $data;
       }
@@ -863,6 +1088,15 @@ class User {
         if (!empty($_FILES)) {
           // $this->upload($data->id, $_FILES);
         }
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -897,6 +1131,15 @@ class User {
           if (!empty($_FILES)) {
             // $this->upload($data->id, $_FILES);
           }
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
           return $this->callback(
             __METHOD__, 
             func_get_args(), 
@@ -925,17 +1168,66 @@ class User {
           $this->controls["delete"]
         )
       ) {
+
         $data = $data[0];
+
         $file_old = Utilities::backtrace() . trim($data->image, "/");
         if (!empty($data->image) && file_exists($file_old)) {
           chmod($file_old, 0777);
           unlink($file_old);
         }
+
+        try {
+          $this->database->delete(
+            "member", 
+            array("user" => $id), 
+            null, 
+            true
+          );
+        } catch (Exception $e) {}
+
+        try {
+          $this->database->delete(
+            "control", 
+            array("user" => $id), 
+            null, 
+            true
+          );
+        } catch (Exception $e) {}
+
+        try {
+          $this->database->delete(
+            "device", 
+            array("user_id" => $id), 
+            null, 
+            true
+          );
+        } catch (Exception $e) {}
+
+        try {
+          $this->database->delete(
+            "connect", 
+            array("user_id" => $id), 
+            null, 
+            true
+          );
+        } catch (Exception $e) {}
+
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "risk",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
           $this->format($data)
         );
+
       } else {
         return null;
       }
@@ -1015,6 +1307,25 @@ class User {
           ),
           true
         );
+      }
+
+      if ($return_references === true || (is_array($return_references) && in_array("members", $return_references))) {
+        if (!empty(
+          $member_list = $this->database->select_multiple(
+            "member", 
+            "*", 
+            array("user" => $data->id), 
+            null, 
+            null, 
+            null, 
+            "id", 
+            "asc", 
+            true,
+            false
+          )
+        )) {
+          $data->members = $member_list;
+        }
       }
   
       if ($return_authoritiy) {
@@ -1139,7 +1450,7 @@ class User {
     $result = false;
     if (!empty($parameters)) {
       if (
-        $this->validation->set($parameters, "username", $patch)
+        $this->validation->set($parameters, "username", ($patch || !empty($target_id)))
         && $this->validation->set($parameters, "password", ($patch || !empty($target_id)))
         && $this->validation->set($parameters, "confirm_password", ($patch || !empty($target_id)))
         && $this->validation->set($parameters, "email", $patch)
@@ -1150,16 +1461,16 @@ class User {
         && $this->validation->set($parameters, "passcode", ($patch || !empty($target_id)))
       ) {
         if (
-          $this->validation->require(isset($parameters["name"]) ? $parameters["username"] : null, "Username", $patch)
+          $this->validation->require(isset($parameters["username"]) ? $parameters["username"] : null, "Username", ($patch || !empty($target_id)))
           && $this->validation->string_min(isset($parameters["username"]) ? $parameters["username"] : null, "Username", 3)
           && $this->validation->string_max(isset($parameters["username"]) ? $parameters["username"] : null, "Username", 100)
           && $this->validation->no_special_characters(isset($parameters["username"]) ? $parameters["username"] : null, "Username")
           && $this->validation->unique(isset($parameters["username"]) ? $parameters["username"] : null, "Username", "username", "user", $target_id)
-          && $this->validation->require(isset($parameters["password"]) ? $parameters["password"] : null, "Password", $patch)
+          && $this->validation->require(isset($parameters["password"]) ? $parameters["password"] : null, "Password", ($patch || !empty($target_id)))
           && $this->validation->string_min(isset($parameters["password"]) ? $parameters["password"] : null, "Password", 8)
           && $this->validation->string_max(isset($parameters["password"]) ? $parameters["password"] : null, "Password", 100)
-          && $this->validation->password(isset($parameters["password"]) ? $parameters["password"] : null, "password")
-          && $this->validation->password_equal_to(isset($parameters["password"]) ? $parameters["password"] : null, "password", $parameters["confirm_password"])
+          && $this->validation->password(isset($parameters["password"]) ? $parameters["password"] : null, "Password")
+          && $this->validation->password_equal_to(isset($parameters["password"]) ? $parameters["password"] : null, "Password", isset($parameters["confirm_password"]) ? $parameters["confirm_password"] : null)
           && $this->validation->number(isset($parameters["passcode"]) ? $parameters["passcode"] : null, "passcode")
           && $this->validation->string_max(isset($parameters["name"]) ? $parameters["name"] : null, "Name", 100)
           && $this->validation->string_max(isset($parameters["last_name"]) ? $parameters["last_name"] : null, "Last Name", 100)

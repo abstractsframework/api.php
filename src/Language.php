@@ -8,6 +8,7 @@ use \Abstracts\Helpers\Translation;
 use \Abstracts\Helpers\Utilities;
 
 use \Abstracts\API;
+use \Abstracts\Log;
 
 use Exception;
 
@@ -30,6 +31,7 @@ class Language {
 
   /* services */
   private $api = null;
+  private $log = null;
 
   function __construct(
     $session = null,
@@ -50,6 +52,9 @@ class Language {
 
     /* initialize: services */
     $this->api = new API($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->log = new Log($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
 
@@ -139,6 +144,15 @@ class Language {
         $this->controls["view"]
       );
       if (!empty($data)) {
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
       } else {
         return null;
@@ -192,6 +206,15 @@ class Language {
         foreach ($list as $value) {
           array_push($data, $this->format($value, $return_references));
         }
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          null,
+          null
+        );
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
         return array();
@@ -254,6 +277,15 @@ class Language {
         $this->controls["create"]
       );
       if (!empty($data)) {
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -284,6 +316,15 @@ class Language {
       );
       if (!empty($data)) {
         $data = $data[0];
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -315,6 +356,15 @@ class Language {
         );
         if (!empty($data)) {
           $data = $data[0];
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
           return $this->callback(
             __METHOD__, 
             func_get_args(), 
@@ -344,6 +394,15 @@ class Language {
         )
       ) {
         $data = $data[0];
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "risk",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 

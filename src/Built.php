@@ -13,6 +13,7 @@ use \Abstracts\Module;
 use \Abstracts\User;
 use \Abstracts\Group;
 use \Abstracts\Page;
+use \Abstracts\Log;
 
 use Exception;
 use DateTime;
@@ -39,6 +40,7 @@ class Built {
 
   /* services */
   private $api = null;
+  private $log = null;
 
   /* instances */
   private $file_types = array(
@@ -89,6 +91,9 @@ class Built {
 
     /* initialize: services */
     $this->api = new API($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->log = new Log($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
     $this->abstracts = $this->initialize($this->id);
@@ -199,6 +204,7 @@ class Built {
   }
 
   function get($id, $active = null, $return_references = false) {
+
     if ($this->validation->require($id, "ID")) {
 
       $active = Initialize::active($active);
@@ -210,14 +216,24 @@ class Built {
       }
       
       $data = $this->database->select(
-        ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
         "*", 
         $filters, 
         null, 
         $this->controls["view"]
       );
       if (!empty($data)) {
-        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
+        $referers = $this->refer($return_references);
+        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
       } else {
         return null;
       }
@@ -257,7 +273,7 @@ class Built {
       }
       
       $list = $this->database->select_multiple(
-        ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
         "*", 
         $filters, 
         $extensions, 
@@ -268,10 +284,20 @@ class Built {
         $this->controls["view"]
       );
       if (!empty($list)) {
+        $referers = $this->refer($return_references);
         $data = array();
         foreach ($list as $value) {
-          array_push($data, $this->format($value, $return_references));
+          array_push($data, $this->format($value, $return_references, $referers));
         }
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          null,
+          null
+        );
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
         return array();
@@ -304,7 +330,7 @@ class Built {
         $filters["active"] = $active;
       }
       $data = $this->database->count(
-        ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
         $filters, 
         $extensions, 
         $start, 
@@ -324,7 +350,7 @@ class Built {
 
     if ($this->validate($parameters)) {
       $data = $this->database->insert(
-        ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
         $parameters, 
         $this->controls["create"]
       );
@@ -332,6 +358,15 @@ class Built {
         if (!empty($files)) {
           $this->upload($data->id, $files);
         }
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -355,7 +390,7 @@ class Built {
 
       if ($this->validate($parameters, $id)) {
         $data = $this->database->update(
-          ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
           $parameters, 
           array("id" => $id), 
           null, 
@@ -366,6 +401,15 @@ class Built {
           if (!empty($files)) {
             $this->upload($data->id, $files);
           }
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
           return $this->callback(
             __METHOD__, 
             func_get_args(), 
@@ -393,7 +437,7 @@ class Built {
 
       if ($this->validate($parameters, $id, true)) {
         $data = $this->database->update(
-          ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
           $parameters, 
           array("id" => $id), 
           null, 
@@ -404,6 +448,15 @@ class Built {
           if (!empty($files)) {
             $this->upload($data->id, $files);
           }
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
           return $this->callback(
             __METHOD__, 
             func_get_args(), 
@@ -426,7 +479,7 @@ class Built {
     if ($this->validation->require($id, "ID")) {
       if (
         $data = $this->database->delete(
-          ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
           array("id" => $id), 
           null, 
           $this->controls["delete"]
@@ -479,11 +532,22 @@ class Built {
           }
 
         }
+
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "risk",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
           $this->format($data)
         );
+
       } else {
         return null;
       }
@@ -497,7 +561,7 @@ class Built {
       
       if (!empty(
         $data_current = $this->database->select(
-          ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
           "*", 
           array("id" => $id), 
           null, 
@@ -663,7 +727,7 @@ class Built {
                 $parameter = array();
                 if (
                   $uploaded_data = $this->database->select(
-                    ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                    (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
                     array($key), 
                     array("id" => $data_target->id), 
                     null, 
@@ -682,7 +746,7 @@ class Built {
               );
               if (
                 $this->database->update(
-                  ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                  (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
                   $parameters, 
                   array("id" => $data_target->id), 
                   null, 
@@ -843,7 +907,7 @@ class Built {
         
         if (!empty(
           $data_current = $this->database->select(
-            ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+            (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
             "*", 
             array("id" => $id), 
             null, 
@@ -928,7 +992,7 @@ class Built {
                     $reference->key => $parameter
                   );
                   $this->database->update(
-                    ($this->module && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                    (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
                     $parameters, 
                     array("id" => $data_current->id), 
                     null, 
@@ -1089,103 +1153,97 @@ class Built {
     return $this->callback(__METHOD__, func_get_args(), $parameters);
   }
 
-  function format($data, $return_references = false, $abstracts_override = null) {
+  function refer($return_references = false, $abstracts_override = null) {
+
+    $data = array();
+    
+    if (!empty($return_references)) {
+
+      if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+        if (!empty($this->abstracts->component_module)) {
+          $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
+        }
+      }
+      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (!empty($this->abstracts->component_user)) {
+          $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
+        }
+      }
+      if ($return_references === true || (is_array($return_references) && in_array("group_id", $return_references))) {
+        if (!empty($this->abstracts->component_group)) {
+          $data["group_id"] = new Group($this->session, Utilities::override_controls(true, true, true, true));
+        }
+      }
+      if ($return_references === true || (is_array($return_references) && in_array("language_id", $return_references))) {
+        if (!empty($this->abstracts->component_language)) {
+          $data["language_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
+        }
+      }
+      if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
+        if (!empty($this->abstracts->component_page)) {
+          $data["page_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
+        }
+      }
+      if ($return_references === true || (is_array($return_references) && in_array("media_id", $return_references))) {
+        if (!empty($this->abstracts->component_media)) {
+          $data["media_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
+        }
+      }
+      foreach ($this->abstracts->references as $reference) {
+        $reference_key = $reference->key;
+        if ($return_references === true || (is_array($return_references) && in_array($reference_key, $return_references))) {
+          if (
+            $reference->input_option == "dynamic"
+            && !empty($reference->input_option_dynamic_module)
+            && !empty($reference->input_option_dynamic_value_key)
+          ) {
+            if (!empty(
+              $module_data = $this->database->select(
+                "module", 
+                "*", 
+                array("id" => $reference->input_option_dynamic_module), 
+                null, 
+                true,
+                false
+              )
+            )) {
+              $classes = explode("\\", get_class());
+              $namespace = "\\" . $classes[0] . "\\" . Utilities::create_class_name($module_data->key);
+              if (class_exists($namespace)) {
+                if (method_exists($namespace, "get")) {
+                  $built = new $namespace($this->session, Utilities::override_controls(true, true, true, true));
+                } else {
+                  $built = new Built($this->session, Utilities::override_controls(true, true, true, true), $module_data->key);
+                }
+              } else {
+                $built = new Built($this->session, Utilities::override_controls(true, true, true, true), $module_data->key);
+              }
+              if (!empty($built)) {
+                $data[$reference_key] = $built;
+              }
+            }
+          }
+        }
+      }
+    }
+
+    return $this->callback(__METHOD__, func_get_args(), $data);
+
+  }
+
+  function format($data, $return_references = false, $referers = null) {
     if (!empty($data)) {
+      
       if ($data->active === "1") {
         $data->active = true;
       } else if ($data->active === "0" || empty($data->active)) {
         $data->active = false;
       }
-      $abstracts = $this->abstracts;
-      if (!empty($abstracts_override)) {
-        $abstracts = $abstracts_override;
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
-        if (!empty($this->abstracts->component_module)) {
-          $module = new Module($this->session, $this->controls);
-          $data->module_id_reference = $module->format(
-            $this->database->get_reference(
-              $data->module_id, 
-              "module", 
-              "id"
-            )
-          );
-        }
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-        if (!empty($this->abstracts->component_user)) {
-          $user = new User($this->session, $this->controls);
-          $data->user_id_reference = $user->format(
-            $this->database->get_reference(
-              $data->user_id, 
-              "user", 
-              "id"
-            )
-          );
-        }
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("group_id", $return_references))) {
-        if (!empty($this->abstracts->component_group)) {
-          $group = new Group($this->session, $this->controls);
-          $data->group_id_reference = $group->format(
-            $this->database->get_reference(
-              $data->group_id, 
-              "group", 
-              "id"
-            )
-          );
-        }
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
-        if (!empty($this->abstracts->component_page)) {
-          $page = new Page($this->session, $this->controls);
-          $data->page_id_reference = $page->format(
-            $this->database->get_reference(
-              $data->page_id, 
-              "page", 
-              "id"
-            )
-          );
-        }
-      }
-      foreach ($abstracts->references as $reference) {
-        $key = $reference->key;
-        if (isset($data->$key)) {
 
-          if (empty($abstracts_override)) {
-            if ($return_references === true || (is_array($return_references) && in_array($key, $return_references))) {
-              if (
-                $reference->input_option == "dynamic"
-                && !empty($reference->input_option_dynamic_module)
-                && !empty($reference->input_option_dynamic_value_key)
-              ) {
-                if (!empty(
-                  $module_data = $this->database->select(
-                    "module", 
-                    "*", 
-                    array("id" => $reference->input_option_dynamic_module), 
-                    null, 
-                    true,
-                    false
-                  )
-                )) {
-                  $abstracts = $this->initialize($module_data->id);
-                  if (!empty($abstracts)) {
-                    $reference_key = $reference->key . "_reference";
-                    $data->$reference_key = $this->format(
-                      $this->database->get_reference(
-                        $data->$key, 
-                        $module_data->database_table, 
-                        $reference->input_option_dynamic_value_key
-                      ),
-                      false,
-                      $abstracts
-                    );
-                  }
-                }
-              }
-            }
-          }
+      foreach ($this->abstracts->references as $reference) {
+        $key = $reference->key;
+        $reference_key = $reference->key . "_reference";
+        if (isset($data->$key)) {
 
           if (in_array($reference->type, $this->multiple_types)) {
             if (
@@ -1214,7 +1272,6 @@ class Built {
             $reference->type == "image-upload" || $reference->file_type == "image"
             || in_array($reference->type, $this->file_types)
           ) {
-            $path_key = $reference->key . "_reference";
             $format_path = function($reference, $value) {
               $path = (object) array(
                 "id" => $value,
@@ -1251,19 +1308,49 @@ class Built {
               return $path;
             };
             if (is_array($data->$key)) {
-              $data->$path_key = array();
+              $data->$reference_key = array();
               foreach ($data->$key as $key_value) {
-                array_push($data->$path_key, $format_path($reference, $key_value));
+                array_push($data->$reference_key, $format_path($reference, $key_value));
               }
             } else {
-              $data->$path_key = $format_path($reference, $data->$key);
+              $data->$reference_key = $format_path($reference, $data->$key);
+            }
+          }
+
+          if (is_array($referers) && !empty($referers) && isset($referers[$key])) {
+            if (is_array($data->$key)) {
+              $data->$reference_key = array_map(
+                function ($value, $referer, $reference) {
+                return $referer->format(
+                  $this->database->get_reference(
+                    $value,
+                    $referer->module->database_table,
+                    $reference->input_option_dynamic_value_key
+                  )
+                );
+                }, 
+                $data->$key, 
+                array_fill(0, count($data->$key), $referers[$key]), 
+                array_fill(0, count($data->$key), $reference)
+              );
+            } else {
+              $data->$reference_key = $referers[$key]->format(
+                $this->database->get_reference(
+                  $data->$key,
+                  $referers[$key]->module->database_table,
+                  $reference->input_option_dynamic_value_key
+                )
+              );
             }
           }
 
         }
       }
+
     }
+
     return $this->callback(__METHOD__, func_get_args(), $data);
+
   }
 
   function validate($parameters, $target_id = null, $patch = false) {
@@ -1531,6 +1618,7 @@ class Built {
         } catch(Exception $e) {
           throw new Exception($e->getMessage(), $e->getCode());
         }
+        return $result;
       } else {
         return $result;
       }

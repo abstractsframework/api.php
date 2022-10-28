@@ -9,6 +9,7 @@ use \Abstracts\Helpers\Utilities;
 
 use \Abstracts\API;
 use \Abstracts\Control;
+use \Abstracts\Log;
 
 use Exception;
 
@@ -32,6 +33,7 @@ class Group {
   /* services */
   private $api = null;
   private $control = null;
+  private $log = null;
 
   function __construct(
     $session = null,
@@ -55,6 +57,9 @@ class Group {
       Utilities::override_controls(true, true, true, true)
     );
     $this->control = new Control($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->log = new Log($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
 
@@ -166,6 +171,15 @@ class Group {
         $this->controls["view"]
       );
       if (!empty($data)) {
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
       } else {
         return null;
@@ -219,6 +233,15 @@ class Group {
         foreach ($list as $value) {
           array_push($data, $this->format($value, $return_references));
         }
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          null,
+          null
+        );
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
         return array();
@@ -311,7 +334,7 @@ class Group {
               );
               $controls_filters = array(
                 "user" => $member_data->user,
-                "module_id" => $control_parameters["id"]
+                "module_id" => $control_parameters["module_id"]
               );
               $controls_extensions = array(
                 array(
@@ -356,6 +379,15 @@ class Group {
           }
         }
 
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -417,7 +449,7 @@ class Group {
               );
               $controls_filters = array(
                 "user" => $member_data->user,
-                "module_id" => $control_parameters["id"]
+                "module_id" => $control_parameters["module_id"]
               );
               $controls_extensions = array(
                 array(
@@ -462,6 +494,15 @@ class Group {
           }
         }
         
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -525,7 +566,7 @@ class Group {
                 );
                 $controls_filters = array(
                   "user" => $member_data->user,
-                  "module_id" => $control_parameters["id"]
+                  "module_id" => $control_parameters["module_id"]
                 );
                 $controls_extensions = array(
                   array(
@@ -570,6 +611,15 @@ class Group {
             }
           }
 
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
           return $this->callback(
             __METHOD__, 
             func_get_args(), 
@@ -602,20 +652,33 @@ class Group {
 
         $data = $data[0];
 
-        $this->database->delete(
-          "member", 
-          array("group_id" => $id), 
-          null, 
-          true
-        );
+        try {
+          $this->database->delete(
+            "member", 
+            array("group_id" => $id), 
+            null, 
+            true
+          );
+        } catch (Exception $e) {}
 
-        $this->database->delete(
-          "control", 
-          array("group_id" => $id), 
-          null, 
-          true
-        );
+        try {
+          $this->database->delete(
+            "control", 
+            array("group_id" => $id), 
+            null, 
+            true
+          );
+        } catch (Exception $e) {}
 
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "risk",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -792,13 +855,12 @@ class Group {
         false
       );
       if (!empty($data)) {
-
         $group_data = $this->database->select(
           "group", 
           "*", 
           array("id" => $id), 
           null, 
-          $this->controls["view"]
+          true
         );
         if (!empty($group_data)) {
           if (!empty($group_data->controls)) {
@@ -830,7 +892,7 @@ class Group {
                 );
                 $controls_filters = array(
                   "user" => $member_data->user,
-                  "module_id" => $control_parameters["id"]
+                  "module_id" => $control_parameters["module_id"]
                 );
                 $controls_extensions = array(
                   array(

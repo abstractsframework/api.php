@@ -8,6 +8,8 @@ use \Abstracts\Helpers\Translation;
 use \Abstracts\Helpers\Utilities;
 
 use \Abstracts\API;
+use \Abstracts\Module;
+use \Abstracts\Log;
 
 use Exception;
 
@@ -30,6 +32,7 @@ class Control {
 
   /* services */
   private $api = null;
+  private $log = null;
 
   function __construct(
     $session = null,
@@ -50,6 +53,9 @@ class Control {
 
     /* initialize: services */
     $this->api = new API($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->log = new Log($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
 
@@ -124,6 +130,15 @@ class Control {
         $this->controls["view"]
       );
       if (!empty($data)) {
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
       } else {
         return null;
@@ -176,6 +191,15 @@ class Control {
         foreach ($list as $value) {
           array_push($data, $this->format($value, $return_references));
         }
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          null,
+          null
+        );
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
         return array();
@@ -198,6 +222,15 @@ class Control {
         $this->controls["create"]
       );
       if (!empty($data)) {
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -268,6 +301,15 @@ class Control {
       );
       if (!empty($data)) {
         $data = $data[0];
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -299,6 +341,15 @@ class Control {
         );
         if (!empty($data)) {
           $data = $data[0];
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
           return $this->callback(
             __METHOD__, 
             func_get_args(), 
@@ -328,6 +379,15 @@ class Control {
         )
       ) {
         $data = $data[0];
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "risk",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -361,16 +421,52 @@ class Control {
     return $parameters;
   }
 
+  function refer($return_references = false, $abstracts_override = null) {
+
+    $data = array();
+    
+    if (!empty($return_references)) {
+      if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+        if (!empty($this->abstracts->component_module)) {
+          $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
+        }
+      }
+    }
+
+    return $this->callback(__METHOD__, func_get_args(), $data);
+
+  }
+
   function format($data, $return_references = false) {
+
     if (!empty($data)) {
+
       if ($data->active === "1") {
         $data->active = true;
       } else if ($data->active === "0" || empty($data->active)) {
         $data->active = false;
       }
-      $data->behaviors = explode(",", $data->behaviors);
+
+      if (!empty($data->behaviors)) {
+        $data->behaviors = explode(",", $data->behaviors);
+      }
+
+      if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+        set_time_limit(0);
+        $data->module_id_reference = $this->format(
+          $this->database->get_reference(
+            $data->module_id, 
+            "module", 
+            "id"
+          ),
+          false
+        );
+      }
+
     }
+
     return $data;
+    
   }
 
   function validate($parameters, $target_id = null, $patch = false) {

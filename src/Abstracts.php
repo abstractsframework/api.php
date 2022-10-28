@@ -10,6 +10,7 @@ use \Abstracts\Helpers\Builder;
 
 use \Abstracts\API;
 use \Abstracts\Module;
+use \Abstracts\Log;
 
 use Exception;
 
@@ -33,6 +34,7 @@ class Abstracts {
 
   /* services */
   private $api = null;
+  private $log = null;
 
   function __construct(
     $session = null,
@@ -54,6 +56,9 @@ class Abstracts {
 
     /* initialize: services */
     $this->api = new API($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->log = new Log($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
 
@@ -123,11 +128,11 @@ class Abstracts {
 
   function build($id) {
     $abstracts_data = $this->get($id, true);
-    $result = $this->builder->database($abstracts_data);
-    if ($result) {
+    try {
+      $this->builder->database($abstracts_data);
       return true;
-    } else {
-      throw new Exception($this->translation->translate("Not found"), 404);
+    } catch (Exception $e) {
+      throw new Exception($this->translation->translate($e->getMessage()), $e->getCode());
     }
   }
 
@@ -149,6 +154,15 @@ class Abstracts {
         $this->controls["view"]
       );
       if (!empty($data)) {
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
       } else {
         return null;
@@ -201,6 +215,15 @@ class Abstracts {
         foreach ($list as $value) {
           array_push($data, $this->format($value, $return_references));
         }
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "low",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          null,
+          null
+        );
         return $this->callback(__METHOD__, func_get_args(), $data);
       } else {
         return array();
@@ -223,6 +246,15 @@ class Abstracts {
         $this->controls["create"]
       );
       if (!empty($data)) {
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -293,6 +325,15 @@ class Abstracts {
       );
       if (!empty($data)) {
         $data = $data[0];
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -324,6 +365,15 @@ class Abstracts {
         );
         if (!empty($data)) {
           $data = $data[0];
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
           return $this->callback(
             __METHOD__, 
             func_get_args(), 
@@ -353,6 +403,15 @@ class Abstracts {
         )
       ) {
         $data = $data[0];
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "risk",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
         return $this->callback(
           __METHOD__, 
           func_get_args(), 
@@ -410,6 +469,15 @@ class Abstracts {
           $file["tmp_name"], 
           false, 
           stream_context_create($context_options)
+        );
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          null,
+          null
         );
         $result = mysqli_multi_query($connection, $query);
         if (!$result) {
@@ -765,6 +833,7 @@ class Abstracts {
   }
 
   function callback($function, $arguments, $result) {
+
     $names = explode("::", $function);
     $classes = explode("\\", $names[0]);
     $namespace = "\\" . $classes[0] . "\\" . "Callback" . "\\" . $classes[1];
@@ -783,6 +852,7 @@ class Abstracts {
     } else {
       return $result;
     }
+
   }
 
 }

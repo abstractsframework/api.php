@@ -30,6 +30,7 @@ class Device {
 
   /* services */
   private $api = null;
+  private $log = null;
 
   function __construct(
     $session = null,
@@ -50,6 +51,9 @@ class Device {
 
     /* initialize: services */
     $this->api = new API($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
+    $this->log = new Log($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
 

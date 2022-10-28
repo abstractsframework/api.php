@@ -400,18 +400,18 @@ CREATE TABLE `lock` (
 
 CREATE TABLE `log` (
   `id` int(11) NOT NULL,
-  `name` varchar(200) NOT NULL,
-  `function` varchar(150) NOT NULL,
-  `violation` enum('low','normal','risk','danger') NOT NULL,
-  `content_hash` text NOT NULL,
-  `link` text NOT NULL,
-  `type` enum('frontend','backend') NOT NULL DEFAULT 'frontend',
-  `ip` varchar(15) NOT NULL,
-  `user_agent` text NOT NULL,
+  `name` varchar(200) NULL,
+  `function` varchar(150) NULL,
+  `violation` enum('low','normal','risk','danger') NULL,
+  `content_hash` text NULL,
+  `link` text NULL,
+  `type` varchar(10) NULL DEFAULT NULL,
+  `ip` varchar(15) NULL,
+  `user_agent` text NULL,
   `create_at` datetime DEFAULT NULL,
-  `module_id` varchar(100) NOT NULL,
-  `module_key` varchar(240) NOT NULL,
-  `module_value` varchar(100) NOT NULL,
+  `module_id` varchar(100) NULL,
+  `module_key` varchar(240) NULL,
+  `module_value` varchar(100) NULL,
   `user_id` int(11) DEFAULT 0
 ) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COMMENT='	';
 

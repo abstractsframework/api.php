@@ -146,12 +146,11 @@ class Database {
         $conditions = $this->condition(
           $this->escape_string($filters, $connection), 
           $this->escape_string($extensions, $connection), 
-          $this->escape_string($controls, $connection)
+          $this->escape_string($controls, $connection),
+          $table
         );
-        
-        if (!empty($keys) && is_array($keys)) {
-          $keys = "`" . implode("`, `", $keys) . "`";
-        }
+
+        $keys = $this->keys($keys, $table);
 
         $query = "SELECT " . $keys . " FROM `" . $table . "` " . $conditions . " LIMIT 1;";
         
@@ -251,22 +250,20 @@ class Database {
         $limit = $this->escape_string($limit, $connection);
         $sort_by = $this->escape_string($sort_by, $connection);
         $sort_direction = $this->escape_string($sort_direction, $connection);
+
         $conditions = $this->condition(
           $this->escape_string($filters, $connection), 
           $this->escape_string($extensions, $connection), 
-          $this->escape_string($controls, $connection)
+          $this->escape_string($controls, $connection),
+          $table
         );
 
-        if (!empty($keys) && is_array($keys)) {
-          $keys = "`" . implode("`, `", $keys) . "`";
-        }
+        $keys = $this->keys($keys, $table);
 
         $query = 
         "SELECT " . $keys . " FROM `" . $table . "` " . $conditions . " " 
         . $this->order($sort_by, $sort_direction) . " " . $this->limit($start, $limit) . ";";
-        
         if ($result = mysqli_query($connection, $query)) {
-
           $rows = array();
           if ($fetch_type == "assoc") {
             while($row = $result->fetch_assoc()) {
@@ -352,6 +349,7 @@ class Database {
 
         $start = $this->escape_string($start, $connection);
         $limit = $this->escape_string($limit, $connection);
+
         $conditions = $this->condition(
           $this->escape_string($filters, $connection), 
           $this->escape_string($extensions, $connection), 
@@ -1048,6 +1046,45 @@ class Database {
 
   }
 
+  function keys($keys = array(), $table = null) {
+
+    $data = array();
+    if (isset($keys) && $keys != "*" && !empty($keys)) {
+
+      $keys = is_array($keys) ? array_map('trim', $keys) : array_map('trim', explode(",", $keys));
+
+      foreach ($keys as $key) {
+        $key = trim(trim($key, "[]'`"), "\'");
+        $key_parts = array_map(function($value) { 
+          return "`" . $value . "`"; 
+        }, explode(".", $key));
+        if (
+          (function_exists("str_contains") && str_contains($key, "."))
+          || (strpos($key, ".") >= 0 && strpos($key, ".") !== false)
+        ) {
+          $key = implode(".", $key_parts);
+        } else {
+          if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
+            $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
+          } else {
+            $key = implode(".", $key_parts);
+          }
+        }
+        array_push($data, $key);
+      }
+
+      if (!empty($data)) {
+        return implode(",", $data);
+      } else {
+        return "";
+      }
+
+    } else {
+        return "`" . trim($table, "`") . "`.*";
+    }
+
+  }
+
   private function arrange_filters($filters = array(), $table = null) {
 
     $filters = is_array($filters) ? $filters : array();
@@ -1063,13 +1100,21 @@ class Database {
           } else if (is_bool($value)) {
             $value = (!empty($value) ? "true" : "false");
           }
+          $key = trim(trim($key, "[]'`"), "\'");
           $key_parts = array_map(function($value) { 
             return "`" . $value . "`"; 
-          }, explode(".", trim(trim($key, "[]'`"), "\'")));
-          if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
-            $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
-          } else {
+          }, explode(".", $key));
+          if (
+            (function_exists("str_contains") && str_contains($key, "."))
+            || (strpos($key, ".") >= 0 && strpos($key, ".") !== false)
+          ) {
             $key = implode(".", $key_parts);
+          } else {
+            if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
+              $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
+            } else {
+              $key = implode(".", $key_parts);
+            }
           }
           array_push($data, $key . " = " . $value);
         }
@@ -1079,33 +1124,45 @@ class Database {
   }
 
   private function arrange_extensions($extensions = array(), $table = null) {
-
+    
     $extensions = is_array($extensions) ? $extensions : array();
 
     $data = array();
+
     if (isset($extensions) && !empty($extensions) && is_array($extensions)) {
       for ($i = 0; $i < count($extensions); $i++) {
         if (isset($extensions[$i])) {
           if (
-            isset($extensions[$i]["extensions"]) 
+            array_key_exists("extensions", $extensions[$i]) 
             && is_array($extensions[$i]["extensions"])
           ) {
-            array_push($data, 
-              (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "")
-              . $this->arrange_extensions($extensions[$i]["extensions"])[0]
-            );
+            $extension_arranged = $this->arrange_extensions($extensions[$i]["extensions"], $table);
+            if (count($extension_arranged)) {
+              array_push($data, 
+                (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "")
+                . $extension_arranged[0]
+              );
+            }
           } else {
             $value = $extensions[$i]["value"];
             if (Utilities::length(trim(trim($extensions[$i]["value"], "[]\'`"), "\'")) < Utilities::length($extensions[$i]["value"])) {
               $value = "'" . trim(trim($extensions[$i]["value"], "[]\'`"), "\'") . "'";
             }
+            $key = trim(trim($extensions[$i]["key"], "[]'`"), "\'");
             $key_parts = array_map(function($value) { 
               return "`" . $value . "`"; 
-            }, explode(".", trim(trim($extensions[$i]["key"], "[]'`"), "\'")));
-            if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
-              $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
-            } else {
+            }, explode(".", $key));
+            if (
+              (function_exists("str_contains") && str_contains($key, "."))
+              || (strpos($key, ".") >= 0 && strpos($key, ".") !== false)
+            ) {
               $key = implode(".", $key_parts);
+            } else {
+              if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
+                $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
+              } else {
+                $key = implode(".", $key_parts);
+              }
             }
             array_push($data, 
               (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "") 
@@ -1139,9 +1196,9 @@ class Database {
           $key = "";
           $value = "";
           $operator = "";
-          $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")((.*)|<[A-Za-z_]+>)/";
+          $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")(.*)/";
           if (preg_match($rule_pattern, $rule, $matches)) {
-            if (count($matches) === 5) {
+            if (count($matches) === 4) {
               $key = $matches[1];
               $value = $matches[3];
               $operator = $matches[2];
@@ -1159,13 +1216,21 @@ class Database {
                 $value = "'" . trim(trim($value, "[]\'`"), "\'") . "'";
               }
             }
+            $key = trim(trim($key, "[]'`"), "\'");
             $key_parts = array_map(function($value) { 
               return "`" . $value . "`"; 
-            }, explode(".", trim(trim($key, "[]'`"), "\'")));
-            if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
-              $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
-            } else {
+            }, explode(".", $key));
+            if (
+              (function_exists("str_contains") && str_contains($key, "."))
+              || (strpos($key, ".") >= 0 && strpos($key, ".") !== false)
+            ) {
               $key = implode(".", $key_parts);
+            } else {
+              if (!empty($table) && !in_array("`" . trim($table, "`") . "`", $key_parts)) {
+                $key = "`" . trim($table, "`") . "`." . implode(".", $key_parts);
+              } else {
+                $key = implode(".", $key_parts);
+              }
             }
             $control = $key . " " . $operator . " " . $value;
           }
@@ -1219,13 +1284,13 @@ class Database {
             $key = "";
             $value = "";
             $operator = "";
-            $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")([A-Za-z_]+|<[A-Za-z_]+>)/";
+            $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")(.*)/";
 
             if (preg_match($rule_pattern, $rule, $matches)) {
-              if (count($matches) === 3) {
-                $key = $matches[0];
-                $value = $matches[2];
-                $operator = $matches[1];
+              if (count($matches) === 4) {
+                $key = $matches[1];
+                $value = $matches[3];
+                $operator = $matches[2];
               }
             }
             if (!empty($key) && !empty($value) && !empty($operator) && in_array($operator, $this::$comparisons)) {
@@ -1497,6 +1562,13 @@ class Database {
             $extensions[$i]["extensions"] = $this->clean_extensions($extensions[$i]["extensions"], $clean_keys);
           } else {
             $key = trim(trim($extensions[$i]["key"], "[]'`"), "\'");
+            if (
+              (function_exists("str_contains") && str_contains($extensions[$i]["key"], "."))
+              || (strpos($extensions[$i]["key"], ".") >= 0 && strpos($extensions[$i]["key"], ".") !== false)
+            ) {
+              $key_parts = explode(".", trim(trim($extensions[$i]["key"], "'`")));
+              $key = trim(trim($key_parts[1], "[]'`"), "\'");
+            }
             if (!in_array($key, $clean_keys)) {
               unset($extensions[$i]);
             }
@@ -1513,13 +1585,13 @@ class Database {
         foreach ($controls as $rules) {
 
           $consolidate = function($rule, $clean_keys) {
-            $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")([A-Za-z_]+|<[A-Za-z_]+>)/";
+            $rule_pattern = "/([A-Za-z_]+|\[[A-Za-z_]+\])(" . implode("|", $this::$comparisons) . ")(.*)/";
             if (preg_match($rule_pattern, $rule, $matches)) {
               $key = "";
-              if (count($matches) === 3) {
-                $key = trim(trim($matches[0], "[]'`"), "\'");
+              if (count($matches) === 4) {
+                $key = trim(trim($matches[1], "[]'`"), "\'");
                 if (!in_array($key, $clean_keys)) {
-                  return $key;
+                  return $rule;
                 }
               }
             }
@@ -1527,13 +1599,29 @@ class Database {
 
           if (is_array($rules)) {
             foreach ($rules as $rule) {
-              if ($key = $consolidate($rule, $clean_keys)) {
-                unset($controls[$key]);
+              if ($rule_check = $consolidate($rule, $clean_keys)) {
+                for ($i = 0; $i < count($controls); $i++) {
+                  if (is_array($controls[$i])) {
+                    for ($j = 0; $j < count($controls[$i]); $j++) {
+                      if ($controls[$i][$j] === $rule_check) {
+                        unset($controls[$i][$j]);
+                        break;
+                      }
+                    }
+                  }
+                }
               }
             }
           } else {
-            if ($key = $consolidate($rules, $clean_keys)) {
-              unset($controls[$key]);
+            if ($rule_check = $consolidate($rules, $clean_keys)) {
+              for ($i = 0; $i < count($controls); $i++) {
+                if (!is_array($controls[$i])) {
+                  if ($controls[$i] === $rule_check) {
+                    unset($controls[$i]);
+                    break;
+                  }
+                }
+              }
             }
           }
 
@@ -1557,7 +1645,9 @@ class Database {
             }
           }
         } else {
-          $parameters = mysqli_real_escape_string($connection, $parameters);
+          if (is_string($parameters)) {
+            $parameters = mysqli_real_escape_string($connection, $parameters);
+          }
         }
         return $parameters;
       } else {

@@ -83,6 +83,8 @@ class Log {
           (isset($parameters) ? $parameters : null), 
           (isset($parameters["extensions"]) ? $parameters["extensions"] : null)
         );
+      } else if ($function == "log") {
+        $result = $this->$function($parameters);
       } else if ($function == "create") {
         $result = $this->$function($parameters);
       } else if ($function == "update") {
@@ -119,6 +121,102 @@ class Log {
       }
     }
     return $result;
+  }
+
+  function log(
+    $name, 
+    $function, 
+    $violation, 
+    $content_hash, 
+    $module_id, 
+    $module_key, 
+    $module_value
+  ) {
+
+    try {
+
+      $link = (isset($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] === "on" ? "https" : "http") . "://" . $_SERVER["HTTP_HOST"] . $_SERVER["REQUEST_URI"];
+
+      $type = "server";
+      if (isset(debug_backtrace()[2]["function"]) && debug_backtrace()[2]["function"] == "request") {
+        $type = "request";
+      }
+
+      $log = false;
+      if ($type == "server" && !empty($this->config["server_log"])) {
+        if (
+          is_array($this->config["server_log"])
+          && in_array($violation, $this->config["server_log"])
+        ) {
+          $log = true;
+        } else if ($this->config["server_log"] == "low" && $violation == "low") {
+          $log = true;
+        } else if ($this->config["server_log"] === true) {
+          $log = true;
+        }
+      } else if ($type == "request" && !empty($this->config["log"])) {
+        if (
+          is_array($this->config["log"])
+          && in_array($violation, $this->config["log"])
+        ) {
+          $log = true;
+        } else if ($this->config["log"] == "low" && $violation == "low") {
+          $log = true;
+        } else if ($this->config["log"] === true) {
+          $log = true;
+        }
+      }
+
+      if ($log === true) {
+
+        $ip = '';
+        if (isset($_SERVER['HTTP_CLIENT_IP'])) {
+          $ip = $_SERVER['HTTP_CLIENT_IP'];
+        } else if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+          $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+        } else if (isset($_SERVER['HTTP_X_FORWARDED'])) {
+          $ip = $_SERVER['HTTP_X_FORWARDED'];
+        } else if (isset($_SERVER['HTTP_FORWARDED_FOR'])) {
+          $ip = $_SERVER['HTTP_FORWARDED_FOR'];
+        } else if (isset($_SERVER['HTTP_FORWARDED'])) {
+          $ip = $_SERVER['HTTP_FORWARDED'];
+        } else if (isset($_SERVER['REMOTE_ADDR'])) {
+          $ip = $_SERVER['REMOTE_ADDR'];
+        }
+          
+        /* initialize: parameters */
+        $parameters = array(
+          "name" => $name,
+          "function" => $function,
+          "violation" => $violation,
+          "content_hash" => (is_array($content_hash) ? serialize($content_hash) : serialize(array($content_hash))),
+          "link" => $link,
+          "type" => $type,
+          "ip" => $ip,
+          "user_agent" => $_SERVER["HTTP_USER_AGENT"],
+          "module_id" => $module_id,
+          "module_key" => $module_key,
+          "module_value" => $module_value
+        );
+    
+        if (!empty($data = $this->create($parameters))) {
+          return $this->callback(
+            __METHOD__, 
+            func_get_args(), 
+            $data
+          );
+        } else {
+          return false;
+        }
+
+      } else {
+        return false;
+      }
+
+    } catch (Exception $e) {
+      return false;
+    }
+
   }
 
   function get($id, $active = null, $return_references = false) {
@@ -378,11 +476,6 @@ class Log {
 
   function format($data, $return_references = false) {
     if (!empty($data)) {
-      if ($data->active === "1") {
-        $data->active = true;
-      } else if ($data->active === "0" || empty($data->active)) {
-        $data->active = false;
-      }
     }
 		return $data;
   }

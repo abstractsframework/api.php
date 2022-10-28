@@ -33,7 +33,7 @@ class Utilities {
         return null;
       }
     };
-
+    
     $get = array();
     if (isset($_REQUEST) && !empty($_REQUEST)) {
       foreach ($_REQUEST as $key => $value) {

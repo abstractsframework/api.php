@@ -130,8 +130,8 @@ $config = array(
     "online" => true,
 
     /* Log */
-    "log" => false, // This could reduce query time
-    "console_log" => true, // This could reduce query time
+    "log" => array("normal", "risk", "high"), // This could reduce query time
+    "server_log" => false, // This could reduce query time
 
     /* Session */
     "session_duration" => "+6 months", // use strtotime command
