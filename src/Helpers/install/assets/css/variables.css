@@ -1,9 +1,0 @@
-:root {
-  --color: #ffffff;
-  --text-color: #557896;
-  --success: #55A44E;
-  --danger: #B90B0B;
-  --primary: #66a6ff;
-  --background: linear-gradient(120deg, #66a6ff 0%, #89f7fe 100%);
-  --font-family: "Roboto", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-}

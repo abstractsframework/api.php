@@ -37,11 +37,30 @@ class Database {
 
   function __construct(
     $session = null,
-    $controls = null
+    $controls = null,
+    $credential = null
   ) {
 
     /* initialize: core */
     $this->config = Initialize::config();
+
+    if (!empty($credential)) {
+      if (isset($credential["host"])) {
+        $this->config["database_host"] = $credential["host"];
+      }
+      if (isset($credential["name"])) {
+        $this->config["database_name"] = $credential["name"];
+      }
+      if (isset($credential["login"])) {
+        $this->config["database_login"] = $credential["login"];
+      }
+      if (isset($credential["password"])) {
+        $this->config["database_password"] = $credential["password"];
+      }
+      if (isset($credential["encoding"])) {
+        $this->config["database_encoding"] = $credential["encoding"];
+      }
+    }
 
     $this->session = $session;
     if (isset($controls) && !empty($controls)) {
@@ -64,20 +83,38 @@ class Database {
 
   }
 
-  function connect($charset = null) {
+  function connect($credential = null, $charset = null) {
+
+    $host = $this->config["database_host"];
+    $name = $this->config["database_name"];
+    $login = $this->config["database_login"];
+    $password = $this->config["database_password"];
+    $encoding = $this->config["database_encoding"];
+    if (!empty($credential)) {
+      if (isset($credential["host"])) {
+        $host = $credential["host"];
+      }
+      if (isset($credential["name"])) {
+        $name = $credential["name"];
+      }
+      if (isset($credential["login"])) {
+        $login = $credential["login"];
+      }
+      if (isset($credential["password"])) {
+        $password = $credential["password"];
+      }
+      if (isset($credential["encoding"])) {
+        $encoding = $credential["encoding"];
+      }
+    }
     
-    $connection = mysqli_connect(
-      $this->config["database_host"], 
-      $this->config["database_login"], 
-      $this->config["database_password"], 
-      $this->config["database_name"]
-    );
+    $connection = mysqli_connect($host, $login, $password, $name);
     if ($connection) {
-      if (!mysqli_select_db($connection, $this->config["database_name"])) {
+      if (!mysqli_select_db($connection, $name)) {
         $connection = false;
       } else {
         if ($charset == null) {
-          $charset = strtolower($this->config["database_encoding"]);
+          $charset = strtolower($encoding);
         }
         if (!mysqli_set_charset($connection, str_replace("-", "", $charset))) {
           $connection = false;

@@ -22,8 +22,7 @@ class Render {
     $this->config = $initialize->config;
     $this->session = $initialize->session;
     if (empty($this->config)) {
-      $backtrace = Utilities::backtrace();
-      include(__DIR__ . "/Helpers/install/index.php");
+      include(__DIR__ . "/Helpers/install/index.html");
     }
   }
 

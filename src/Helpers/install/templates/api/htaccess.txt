@@ -4,7 +4,7 @@ Options Indexes FollowSymLinks
 
 	RewriteEngine On
 	
-	RewriteBase {{rewrite_base_url}}
+	RewriteBase {{rewrite_base_url}}api/
 
 	RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
 	

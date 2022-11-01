@@ -453,46 +453,46 @@ class Abstracts {
     $error = false;
 
     $connection = $this->database->connect();
-    
-    if (isset($files["abstracts"]) && isset($files["abstracts"]["name"])) {
-      $file = $files["abstracts"];
-      $file_info = pathinfo($file["name"]);
-      $file_extension = strtolower($file_info["extension"]);
-      if ($file_extension == "abstracts") {
-        $context_options = array(
-          "ssl" => array(
-            "verify_peer" => false,
-            "verify_peer_name" => false,
-          )
-        );
-        $query = file_get_contents(
-          $file["tmp_name"], 
-          false, 
-          stream_context_create($context_options)
-        );
-        $this->log->log(
-          __FUNCTION__,
-          __METHOD__,
-          "normal",
-          func_get_args(),
-          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-          null,
-          null
-        );
-        $result = mysqli_multi_query($connection, $query);
-        if (!$result) {
+    if (!empty($connection)) {
+      if (isset($files["abstracts"]) && isset($files["abstracts"]["name"])) {
+        $file = $files["abstracts"];
+        $file_info = pathinfo($file["name"]);
+        $file_extension = strtolower($file_info["extension"]);
+        if ($file_extension == "abstracts") {
+          $context_options = array(
+            "ssl" => array(
+              "verify_peer" => false,
+              "verify_peer_name" => false,
+            )
+          );
+          $query = file_get_contents(
+            $file["tmp_name"], 
+            false, 
+            stream_context_create($context_options)
+          );
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            null,
+            null
+          );
+          $result = mysqli_multi_query($connection, $query);
+          if (!$result) {
+            $error = true;
+          }
+        } else {
           $error = true;
+          throw new Exception($this->translation->translate("Unsupported file"), 415);
         }
       } else {
         $error = true;
-        throw new Exception($this->translation->translate("Unsupported file"), 415);
+        throw new Exception($this->translation->translate("File not found"), 404);
       }
-    } else {
-      $error = true;
-      throw new Exception($this->translation->translate("File not found"), 404);
+      $this->database->disconnect($connection);
     }
-
-    $this->database->disconnect($connection);
 
     if ($error === false) {
       return true;
@@ -507,226 +507,229 @@ class Abstracts {
     $data = null;
 
     $connection = $this->database->connect();
+    if (!empty($connection)) {
 
-    $query_file = "
-    TRUNCATE `abstracts`;";
+      $query_file = "
+      TRUNCATE `abstracts`;";
 
-	  $query = "
-    SELECT * FROM `abstracts`;";
-    $result = mysqli_query($connection, $query);
-    if ($result) {
-      while($row = mysqli_fetch_assoc($result)) {
-        $query_file .= "
+      $query = "
+      SELECT * FROM `abstracts`;";
+      $result = mysqli_query($connection, $query);
+      if ($result) {
+        while($row = mysqli_fetch_assoc($result)) {
+          $query_file .= "
 
-    INSERT INTO `abstracts` (
-      `id`,
-      `name`,
-      `key`,
-      `description`,
-      `component_module`,
-      `component_group`,
-      `component_user`,
-      `component_language`,
-      `component_page`,
-      `component_media`,
-      `database_engine`,
-      `database_collation`,
-      `data_sortable`,
-      `template`,
-      `icon`,
-      `category`,
-      `subject`,
-      `subject_icon`,
-      `order`,
-      `create_at`,
-      `active`,
-      `user_id`
-    ) VALUES (
-      '" . $row["id"] . "',
-      '" . $row["name"] . "',
-      '" . $row["key"] . "',
-      '" . $row["description"] . "',
-      '" . $row["component_module"] . "',
-      '" . $row["component_group"] . "',
-      '" . $row["component_user"] . "',
-      '" . $row["component_language"] . "',
-      '" . $row["component_page"] . "',
-      '" . $row["component_media"] . "',
-      '" . $row["database_engine"] . "',
-      '" . $row["database_collation"] . "',
-      '" . $row["data_sortable"] . "',
-      '" . $row["template"] . "',
-      '" . $row["icon"] . "',
-      '" . $row["category"] . "',
-      '" . $row["subject"] . "',
-      '" . $row["subject_icon"] . "',
-      '" . $row["order"] . "',
-      '" . $row["create_at"] . "',
-      '" . $row["active"] . "',
-      '" . $row["user_id"] . "'
-    );";
-		}
-		mysqli_free_result($result);
-
-		$query_file .= "
-
-    TRUNCATE `reference`;";
-
-		$query = "
-		SELECT * FROM `reference`;";
-		$result = mysqli_query($connection, $query);
-		if ($result) {
-			while($row = mysqli_fetch_assoc($result)) {
-				$query_file .= "
-
-    INSERT INTO `reference` (
-      `id`,
-      `label`,
-      `key`,
-      `type`,
-      `module`,
-      `reference`,
-      `placeholder`,
-      `help`,
-      `require`,
-      `readonly`,
-      `disable`,
-      `hidden`,
-      `validate_string_min`,
-      `validate_string_max`,
-      `validate_number_min`,
-      `validate_number_max`,
-      `validate_decimal_min`,
-      `validate_decimal_max`,
-      `validate_datetime_min`,
-      `validate_datetime_max`,
-      `validate_password_equal_to`,
-      `validate_email`,
-      `validate_password`,
-      `validate_url`,
-      `validate_no_spaces`,
-      `validate_no_special_characters`,
-      `validate_no_digit`,
-      `validate_uppercase_only`,
-      `validate_lowercase_only`,
-      `validate_number`,
-      `validate_decimal`,
-      `validate_unique`,
-      `validate_datetime`,
-      `validate_key`,
-      `default_value`,
-      `default_switch`,
-      `input_option`,
-      `input_option_static_value`,
-      `input_option_dynamic_module`,
-      `input_option_dynamic_value_key`,
-      `input_option_dynamic_label_key`,
-      `input_multiple_type`,
-      `file_type`,
-      `file_lock`,
-      `date_format`,
-      `color_format`,
-      `input_multiple_format`,
-      `upload_folder`,
-      `image_width`,
-      `image_height`,
-      `image_width_ratio`,
-      `image_height_ratio`,
-      `image_quality`,
-      `image_thumbnail`,
-      `image_thumbnail_aspectratio`,
-      `image_thumbnail_quality`,
-      `image_thumbnail_width`,
-      `image_thumbnail_height`,
-      `image_large`,
-      `image_large_aspectratio`,
-      `image_large_quality`,
-      `image_large_width`,
-      `image_large_height`,
-      `grid_width`,
-      `alignment`,
-      `order`,
-      `create_at`,
-      `active`,
-      `user_id`
-    ) VALUES (
-      '" . $row["id"] . "',
-      '" . $row["label"] . "',
-      '" . $row["key"] . "',
-      '" . $row["type"] . "',
-      '" . $row["module"] . "',
-      '" . $row["reference"] . "',
-      '" . $row["placeholder"] . "',
-      '" . $row["help"] . "',
-      '" . $row["require"] . "',
-      '" . $row["readonly"] . "',
-      '" . $row["disable"] . "',
-      '" . $row["hidden"] . "',
-      " . ($row["validate_string_min"] === NULL ? "NULL" :  "'" . $row["validate_string_min"] . "'") . ",
-      " . ($row["validate_string_max"] === NULL ? "NULL" :  "'" . $row["validate_string_max"] . "'") . ",
-      " . ($row["validate_number_min"] === NULL ? "NULL" :  "'" . $row["validate_number_min"] . "'") . ",
-      " . ($row["validate_number_max"] === NULL ? "NULL" :  "'" . $row["validate_number_max"] . "'") . ",
-      " . ($row["validate_decimal_min"] === NULL ? "NULL" :  "'" . $row["validate_decimal_min"] . "'") . ",
-      " . ($row["validate_decimal_max"] === NULL ? "NULL" :  "'" . $row["validate_decimal_max"] . "'") . ",
-      " . ($row["validate_datetime_min"] === NULL ? "NULL" :  "'" . $row["validate_datetime_min"] . "'") . ",
-      " . ($row["validate_datetime_max"] === NULL ? "NULL" :  "'" . $row["validate_datetime_max"] . "'") . ",
-      '" . $row["validate_password_equal_to"] . "',
-      '" . $row["validate_email"] . "',
-      '" . $row["validate_password"] . "',
-      '" . $row["validate_url"] . "',
-      '" . $row["validate_no_spaces"] . "',
-      '" . $row["validate_no_special_characters"] . "',
-      '" . $row["validate_no_digit"] . "',
-      '" . $row["validate_uppercase_only"] . "',
-      '" . $row["validate_lowercase_only"] . "',
-      '" . $row["validate_number"] . "',
-      '" . $row["validate_decimal"] . "',
-      '" . $row["validate_unique"] . "',
-      '" . $row["validate_datetime"] . "',
-      '" . $row["validate_key"] . "',
-      '" . $row["default_value"] . "',
-      '" . $row["default_switch"] . "',
-      '" . $row["input_option"] . "',
-      '" . $row["input_option_static_value"] . "',
-      '" . $row["input_option_dynamic_module"] . "',
-      '" . $row["input_option_dynamic_value_key"] . "',
-      '" . $row["input_option_dynamic_label_key"] . "',
-      '" . $row["input_multiple_type"] . "',
-      '" . $row["file_type"] . "',
-      '" . $row["file_lock"] . "',
-      '" . $row["date_format"] . "',
-      '" . $row["color_format"] . "',
-      '" . $row["input_multiple_format"] . "',
-      '" . $row["upload_folder"] . "',
-      " . ($row["image_width"] === NULL ? "NULL" :  "'" . $row["image_width"] . "'") . ",
-      " . ($row["image_height"] === NULL ? "NULL" :  "'" . $row["image_height"] . "'") . ",
-      " . ($row["image_width_ratio"] === NULL ? "NULL" :  "'" . $row["image_width_ratio"] . "'") . ",
-      " . ($row["image_height_ratio"] === NULL ? "NULL" :  "'" . $row["image_height_ratio"] . "'") . ",
-      '" . $row["image_quality"] . "',
-      " . ($row["image_thumbnail"] === NULL ? "NULL" :  "'" . $row["image_thumbnail"] . "'") . ",
-      '" . $row["image_thumbnail_aspectratio"] . "',
-      '" . $row["image_thumbnail_quality"] . "',
-      '" . $row["image_thumbnail_width"] . "',
-      '" . $row["image_thumbnail_height"] . "',
-      " . ($row["image_large"] === NULL ? "NULL" :  "'" . $row["image_large"] . "'") . ",
-      '" . $row["image_large_aspectratio"] . "',
-      '" . $row["image_large_quality"] . "',
-      '" . $row["image_large_width"] . "',
-      '" . $row["image_large_height"] . "',
-      '" . $row["grid_width"] . "',
-      '" . $row["alignment"] . "',
-      '" . $row["order"] . "',
-      '" . $row["create_at"] . "',
-      '" . $row["active"] . "',
-      '" . $row["user_id"] . "'
-    );";
-        }
-        $data = $query_file;
-        mysqli_free_result($result);
+      INSERT INTO `abstracts` (
+        `id`,
+        `name`,
+        `key`,
+        `description`,
+        `component_module`,
+        `component_group`,
+        `component_user`,
+        `component_language`,
+        `component_page`,
+        `component_media`,
+        `database_engine`,
+        `database_collation`,
+        `data_sortable`,
+        `template`,
+        `icon`,
+        `category`,
+        `subject`,
+        `subject_icon`,
+        `order`,
+        `create_at`,
+        `active`,
+        `user_id`
+      ) VALUES (
+        '" . $row["id"] . "',
+        '" . $row["name"] . "',
+        '" . $row["key"] . "',
+        '" . $row["description"] . "',
+        '" . $row["component_module"] . "',
+        '" . $row["component_group"] . "',
+        '" . $row["component_user"] . "',
+        '" . $row["component_language"] . "',
+        '" . $row["component_page"] . "',
+        '" . $row["component_media"] . "',
+        '" . $row["database_engine"] . "',
+        '" . $row["database_collation"] . "',
+        '" . $row["data_sortable"] . "',
+        '" . $row["template"] . "',
+        '" . $row["icon"] . "',
+        '" . $row["category"] . "',
+        '" . $row["subject"] . "',
+        '" . $row["subject_icon"] . "',
+        '" . $row["order"] . "',
+        '" . $row["create_at"] . "',
+        '" . $row["active"] . "',
+        '" . $row["user_id"] . "'
+      );";
       }
-    }
+      mysqli_free_result($result);
 
-    $this->database->disconnect($connection);
+      $query_file .= "
+
+      TRUNCATE `reference`;";
+
+      $query = "
+      SELECT * FROM `reference`;";
+      $result = mysqli_query($connection, $query);
+      if ($result) {
+        while($row = mysqli_fetch_assoc($result)) {
+          $query_file .= "
+
+      INSERT INTO `reference` (
+        `id`,
+        `label`,
+        `key`,
+        `type`,
+        `module`,
+        `reference`,
+        `placeholder`,
+        `help`,
+        `require`,
+        `readonly`,
+        `disable`,
+        `hidden`,
+        `validate_string_min`,
+        `validate_string_max`,
+        `validate_number_min`,
+        `validate_number_max`,
+        `validate_decimal_min`,
+        `validate_decimal_max`,
+        `validate_datetime_min`,
+        `validate_datetime_max`,
+        `validate_password_equal_to`,
+        `validate_email`,
+        `validate_password`,
+        `validate_url`,
+        `validate_no_spaces`,
+        `validate_no_special_characters`,
+        `validate_no_digit`,
+        `validate_uppercase_only`,
+        `validate_lowercase_only`,
+        `validate_number`,
+        `validate_decimal`,
+        `validate_unique`,
+        `validate_datetime`,
+        `validate_key`,
+        `default_value`,
+        `default_switch`,
+        `input_option`,
+        `input_option_static_value`,
+        `input_option_dynamic_module`,
+        `input_option_dynamic_value_key`,
+        `input_option_dynamic_label_key`,
+        `input_multiple_type`,
+        `file_type`,
+        `file_lock`,
+        `date_format`,
+        `color_format`,
+        `input_multiple_format`,
+        `upload_folder`,
+        `image_width`,
+        `image_height`,
+        `image_width_ratio`,
+        `image_height_ratio`,
+        `image_quality`,
+        `image_thumbnail`,
+        `image_thumbnail_aspectratio`,
+        `image_thumbnail_quality`,
+        `image_thumbnail_width`,
+        `image_thumbnail_height`,
+        `image_large`,
+        `image_large_aspectratio`,
+        `image_large_quality`,
+        `image_large_width`,
+        `image_large_height`,
+        `grid_width`,
+        `alignment`,
+        `order`,
+        `create_at`,
+        `active`,
+        `user_id`
+      ) VALUES (
+        '" . $row["id"] . "',
+        '" . $row["label"] . "',
+        '" . $row["key"] . "',
+        '" . $row["type"] . "',
+        '" . $row["module"] . "',
+        '" . $row["reference"] . "',
+        '" . $row["placeholder"] . "',
+        '" . $row["help"] . "',
+        '" . $row["require"] . "',
+        '" . $row["readonly"] . "',
+        '" . $row["disable"] . "',
+        '" . $row["hidden"] . "',
+        " . ($row["validate_string_min"] === NULL ? "NULL" :  "'" . $row["validate_string_min"] . "'") . ",
+        " . ($row["validate_string_max"] === NULL ? "NULL" :  "'" . $row["validate_string_max"] . "'") . ",
+        " . ($row["validate_number_min"] === NULL ? "NULL" :  "'" . $row["validate_number_min"] . "'") . ",
+        " . ($row["validate_number_max"] === NULL ? "NULL" :  "'" . $row["validate_number_max"] . "'") . ",
+        " . ($row["validate_decimal_min"] === NULL ? "NULL" :  "'" . $row["validate_decimal_min"] . "'") . ",
+        " . ($row["validate_decimal_max"] === NULL ? "NULL" :  "'" . $row["validate_decimal_max"] . "'") . ",
+        " . ($row["validate_datetime_min"] === NULL ? "NULL" :  "'" . $row["validate_datetime_min"] . "'") . ",
+        " . ($row["validate_datetime_max"] === NULL ? "NULL" :  "'" . $row["validate_datetime_max"] . "'") . ",
+        '" . $row["validate_password_equal_to"] . "',
+        '" . $row["validate_email"] . "',
+        '" . $row["validate_password"] . "',
+        '" . $row["validate_url"] . "',
+        '" . $row["validate_no_spaces"] . "',
+        '" . $row["validate_no_special_characters"] . "',
+        '" . $row["validate_no_digit"] . "',
+        '" . $row["validate_uppercase_only"] . "',
+        '" . $row["validate_lowercase_only"] . "',
+        '" . $row["validate_number"] . "',
+        '" . $row["validate_decimal"] . "',
+        '" . $row["validate_unique"] . "',
+        '" . $row["validate_datetime"] . "',
+        '" . $row["validate_key"] . "',
+        '" . $row["default_value"] . "',
+        '" . $row["default_switch"] . "',
+        '" . $row["input_option"] . "',
+        '" . $row["input_option_static_value"] . "',
+        '" . $row["input_option_dynamic_module"] . "',
+        '" . $row["input_option_dynamic_value_key"] . "',
+        '" . $row["input_option_dynamic_label_key"] . "',
+        '" . $row["input_multiple_type"] . "',
+        '" . $row["file_type"] . "',
+        '" . $row["file_lock"] . "',
+        '" . $row["date_format"] . "',
+        '" . $row["color_format"] . "',
+        '" . $row["input_multiple_format"] . "',
+        '" . $row["upload_folder"] . "',
+        " . ($row["image_width"] === NULL ? "NULL" :  "'" . $row["image_width"] . "'") . ",
+        " . ($row["image_height"] === NULL ? "NULL" :  "'" . $row["image_height"] . "'") . ",
+        " . ($row["image_width_ratio"] === NULL ? "NULL" :  "'" . $row["image_width_ratio"] . "'") . ",
+        " . ($row["image_height_ratio"] === NULL ? "NULL" :  "'" . $row["image_height_ratio"] . "'") . ",
+        '" . $row["image_quality"] . "',
+        " . ($row["image_thumbnail"] === NULL ? "NULL" :  "'" . $row["image_thumbnail"] . "'") . ",
+        '" . $row["image_thumbnail_aspectratio"] . "',
+        '" . $row["image_thumbnail_quality"] . "',
+        '" . $row["image_thumbnail_width"] . "',
+        '" . $row["image_thumbnail_height"] . "',
+        " . ($row["image_large"] === NULL ? "NULL" :  "'" . $row["image_large"] . "'") . ",
+        '" . $row["image_large_aspectratio"] . "',
+        '" . $row["image_large_quality"] . "',
+        '" . $row["image_large_width"] . "',
+        '" . $row["image_large_height"] . "',
+        '" . $row["grid_width"] . "',
+        '" . $row["alignment"] . "',
+        '" . $row["order"] . "',
+        '" . $row["create_at"] . "',
+        '" . $row["active"] . "',
+        '" . $row["user_id"] . "'
+      );";
+          }
+          $data = $query_file;
+          mysqli_free_result($result);
+        }
+      }
+
+      $this->database->disconnect($connection);
+
+    }
 
     return $data;
 

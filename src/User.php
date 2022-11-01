@@ -842,7 +842,7 @@ class User {
         if (!empty($controls)) {
     
           $connection = $this->database->connect();
-          if ($connection) {
+          if (!empty($connection)) {
             
             $error = false;
     

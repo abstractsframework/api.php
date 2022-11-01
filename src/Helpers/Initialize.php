@@ -98,10 +98,10 @@ class Initialize {
     }
     $config = Initialize::config();
     if (!empty($config)) {
-      if (isset($config["services_path"])) {
+      if (isset($config["services_path"]) && file_exists(Utilities::backtrace() . trim($config["services_path"], "/"))) {
         array_push($paths, (Utilities::backtrace() . trim($config["services_path"], "/")));
       }
-      if (isset($config["callback_path"])) {
+      if (isset($config["callback_path"]) && file_exists(Utilities::backtrace() . trim($config["callback_path"], "/"))) {
         array_push($paths, (Utilities::backtrace() . trim($config["callback_path"], "/")));
       }
     }

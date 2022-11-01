@@ -492,7 +492,7 @@ CREATE TABLE `module` (
 -- Dumping data for table `module`
 --
 
-INSERT INTO `module` (`id`, `name`, `link`, `description`, `icon`, `category`, `subject`, `subject_icon`, `key`, `database_table`, `service`, `page_template`, `individual_page_parent_link`, `page_template_settings`, `page_parent_link_key`, `default_controls`, `table_columns`, `order`, `create_at`, `authentication`, `active`, `page_id`, `user_id`) VALUES
+INSERT INTO `module` (`id`, `name`, `link`, `description`, `icon`, `category`, `subject`, `subject_icon`, `key`, `database_table`, `service`, `page_template`, `individual_page_parent_link`, `page_template_settings`, `page_parent_link_key`, `default_controls`, `table_columns`, `order`, `create_at`, `active`, `page_id`, `user_id`) VALUES
 (1, 'Abstracts', 'abstracts', '', 'si si-puzzle', 'System', 'Modules', 'si si-layers', 'abstracts', 'abstracts', 'abstracts', '', '', '', 0, '', '', 73, NOW(), 0, NULL, 1),
 (2, 'Reference', 'reference', '', 'fa fa-database', 'System', 'Modules', 'si si-layers', 'reference', 'reference', 'reference', '', '', '', 0, '', '', 74, NOW(), 0, NULL, 1),
 (3, 'Template', 'template', '', 'fa fa-list-ol', 'System', 'Modules', 'si si-layers', 'template', 'template', 'template', '', '', '', 0, '', 0, 75, NOW(), 0, NULL, 1),

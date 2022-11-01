@@ -1,0 +1,16 @@
+{
+  "files": {
+    "main.css": "./vendor/abstracts/core/src/Helpers/install/static/css/main.74c6a978.css",
+    "main.js": "./vendor/abstracts/core/src/Helpers/install/static/js/main.63737178.js",
+    "static/js/787.bc1e24f5.chunk.js": "./vendor/abstracts/core/src/Helpers/install/static/js/787.bc1e24f5.chunk.js",
+    "static/media/logo.svg": "./vendor/abstracts/core/src/Helpers/install/static/media/logo.a534475286c05c7dd4b616cb51b1f3ae.svg",
+    "index.html": "./vendor/abstracts/core/src/Helpers/install/index.html",
+    "main.74c6a978.css.map": "./vendor/abstracts/core/src/Helpers/install/static/css/main.74c6a978.css.map",
+    "main.63737178.js.map": "./vendor/abstracts/core/src/Helpers/install/static/js/main.63737178.js.map",
+    "787.bc1e24f5.chunk.js.map": "./vendor/abstracts/core/src/Helpers/install/static/js/787.bc1e24f5.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.74c6a978.css",
+    "static/js/main.63737178.js"
+  ]
+}
