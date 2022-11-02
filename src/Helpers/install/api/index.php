@@ -1,5 +1,5 @@
 <?php
-require("../vendor/autoload.php");
+require("../../../../../../autoload.php");
 require("../services/Install.php");
 
 use \Abstracts\Install;
@@ -12,12 +12,13 @@ try {
   if (!empty($_GET["install"])) {
     Initialize::headers();
     Initialize::response_headers();
+    $parameters = Utilities::handle_request();
     if ($_GET["install"] == "config") {
       $result = $install->config(
         (isset($parameters["site_name"]) ? $parameters["site_name"] : null), 
         (isset($parameters["password_salt"]) ? $parameters["password_salt"] : null), 
         (isset($parameters["database_host"]) ? $parameters["database_host"] : null), 
-        (isset($parameters["database_table"]) ? $parameters["database_table"] : null), 
+        (isset($parameters["database_name"]) ? $parameters["database_name"] : null), 
         (isset($parameters["database_login"]) ? $parameters["database_login"] : null), 
         (isset($parameters["database_password"]) ? $parameters["database_password"] : null)
       );
@@ -29,7 +30,7 @@ try {
         (isset($parameters["password"]) ? $parameters["password"] : null), 
         (isset($parameters["password_salt"]) ? $parameters["password_salt"] : null), 
         (isset($parameters["database_host"]) ? $parameters["database_host"] : null), 
-        (isset($parameters["database_table"]) ? $parameters["database_table"] : null), 
+        (isset($parameters["database_name"]) ? $parameters["database_name"] : null), 
         (isset($parameters["database_login"]) ? $parameters["database_login"] : null), 
         (isset($parameters["database_password"]) ? $parameters["database_password"] : null)
       );
