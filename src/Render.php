@@ -89,4 +89,34 @@ class Render {
     }
   }
 
+  function page() {
+    if (!empty($this->config)) {
+      
+      $translation = new Translation();
+        
+      try {
+        
+        $message = array(
+          400 => $translation->translate("Bad request"),
+          404 => $translation->translate("Endpoint not found"),
+          405 => $translation->translate("Method not found"),
+          409 => $translation->translate("No response")
+        );
+        
+        echo "";
+      
+      } catch(Exception $e) {
+        header($e->getMessage(), true, $e->getCode());
+        echo Utilities::handle_response(
+          array(
+            "status" => false,
+            "code" => $e->getCode(),
+            "message" => $e->getMessage()
+          )
+        );
+      }
+      
+    }
+  }
+
 }

@@ -184,39 +184,12 @@ class Utilities {
     );
   }
 
-  public static function root_path() {
-    return implode('/', 
-      array_intersect(
-        explode("/", __DIR__),
-        explode("/", getcwd())
-      )
-    );
-  }
-
-  public static function base_url() {
-    return 
-    (isset($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] === "on" ? "https" : "http") 
-    . "://" 
-    . $_SERVER["HTTP_HOST"]
-    . implode('/', 
-      array_intersect(
-        explode("/", __DIR__),
-        explode("/", $_SERVER["REQUEST_URI"])
-      )
-    );
-  }
-
   public static function backtrace($origin = "") {
     if (empty($origin)) {
       $origin = getcwd();
     }
-    $root_path = implode('/', 
-      array_intersect(
-        explode("/", __DIR__),
-        explode("/", getcwd())
-      )
-    );
-    $path = str_replace($root_path, "", $origin);
+    $base_path = rtrim(str_replace("vendor/abstracts/core/src/Helpers", "", __DIR__), "/");
+    $path = str_replace($base_path, "", $origin);
     $backtrace = "";
     for ($i = 0; $i < count(explode("/", $path)); $i++) $i > 0 ? $backtrace .= "../" : $backtrace .= "";
     return $backtrace;

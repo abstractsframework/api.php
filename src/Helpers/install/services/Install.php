@@ -6,20 +6,9 @@ use \Abstracts\Helpers\Validation;
 use \Abstracts\Helpers\Translation;
 use \Abstracts\Helpers\Utilities;
 
-use \Abstracts\Log;
-
 use Exception;
 
 class Install {
-
-  /* configuration */
-  // private $directory = "/vendor/abstracts/core/src/Helpers/install";
-  private $directory = "";
-
-  /* core */
-  private $config = null;
-  private $session = null;
-  private $controls = null;
 
   /* helpers */
   private $database = null;
@@ -46,7 +35,7 @@ class Install {
 
     error_reporting(E_ERROR | E_PARSE);
     
-    $template_file_path = Utilities::backtrace() . "templates/config.txt";
+    $template_file_path = "../templates/config.txt";
     try {
       $template_file = fopen($template_file_path, "r");
       if ($template_file) {
@@ -55,7 +44,7 @@ class Install {
         fclose($template_file);
     
         $template = str_replace("{{site_name}}", $site_name, $template);
-        $template = str_replace("{{base_url}}", Utilities::base_url(), $template);
+        $template = str_replace("{{base_url}}", $this->base_url(), $template);
         $template = str_replace("{{password_salt}}", $password_salt, $template);
         $template = str_replace("{{database_host}}", $database_host, $template);
         $template = str_replace("{{database_name}}", $database_name, $template);
@@ -63,11 +52,11 @@ class Install {
         $template = str_replace("{{database_password}}", $database_password, $template);
 
         try {
-          chmod(Utilities::root_path(), 0777);
-          shell_exec(sprintf('sudo chmod 777 "' . Utilities::root_path() . '"'));
+          chmod($this->root_path(), 0777);
+          shell_exec(sprintf('sudo chmod 777 "' . $this->root_path() . '"'));
         } catch (Exception $e) {}
     
-        $destination_file_path = Utilities::root_path() . "/abstracts.config.php";
+        $destination_file_path = $this->root_path() . "/abstracts.config.php";
         if (!file_exists($destination_file_path)) {
           $destination_file = fopen($destination_file_path, 'w+');
           if ($destination_file) {
@@ -104,7 +93,7 @@ class Install {
     $database_password
   ) {
   
-    $template_file_path = Utilities::backtrace() . "templates/database.sql";
+    $template_file_path = "../templates/database.sql";
     try {
       $template_file = fopen($template_file_path, "r");
       if ($template_file) {
@@ -149,6 +138,8 @@ class Install {
             throw new Exception($this->translation->translate("Database encountered error"), 409);
           }
           $this->database->disconnect($connection);
+        } else {
+          throw new Exception($this->translation->translate("Unable to connect to database"), 409);
         }
       } else {
         throw new Exception($this->translation->translate("Template file not found"), 409);
@@ -165,7 +156,7 @@ class Install {
   
     try {
 
-      $service_directory_path = Utilities::root_path() . "/services/";
+      $service_directory_path = $this->root_path() . "/services/";
       if (!file_exists($service_directory_path)) {
         mkdir($service_directory_path, 0777, true);
       } else {
@@ -173,7 +164,7 @@ class Install {
         shell_exec(sprintf('sudo chmod 777 "' . $service_directory_path . '"'));
       }
 
-      $media_directory_path = Utilities::root_path() . "/media/";
+      $media_directory_path = $this->root_path() . "/media/";
       if (!file_exists($media_directory_path)) {
         mkdir($media_directory_path, 0777, true);
       } else {
@@ -182,7 +173,7 @@ class Install {
       }
 
       if ($type == "web") {
-        $api_directory_path = Utilities::root_path() . "/api/";
+        $api_directory_path = $this->root_path() . "/api/";
         if (!file_exists($api_directory_path)) {
           mkdir($api_directory_path, 0777, true);
         } else {
@@ -205,7 +196,7 @@ class Install {
   
     $errors = array();
     
-    $template_file_path = Utilities::backtrace() . "templates/htaccess.txt";
+    $template_file_path = "../templates/htaccess.txt";
     try {
       $template_file = fopen($template_file_path, "r");
       if ($template_file) {
@@ -213,16 +204,21 @@ class Install {
         $template = fread($template_file, filesize($template_file_path));
         fclose($template_file);
 
-        $rewrite_base_url = implode('/', 
-          array_intersect(
-            explode("/", __DIR__),
-            explode("/", $_SERVER["REQUEST_URI"])
-          )
-        ) . "/";
+        $rewrite_base_url = 
+        str_replace(
+          "/vendor/abstracts/core/src/Helpers/install",
+          "",
+          implode('/', 
+            array_intersect(
+              explode("/", __DIR__),
+              explode("/", $_SERVER["REQUEST_URI"])
+            )
+          ) . "/"
+        );
     
         $template = str_replace("{{rewrite_base_url}}", $rewrite_base_url, $template);
     
-        $destination_file_path = Utilities::root_path() . "/.htaccess";
+        $destination_file_path = $this->root_path() . "/.htaccess";
         if (!file_exists($destination_file_path)) {
     
           $destination_file = fopen($destination_file_path, 'w+');
@@ -247,16 +243,16 @@ class Install {
         array_push($errors, $this->translation->translate("Template file not found"));
       }
     
-      $template_file_path = Utilities::backtrace() . "templates/web.config.txt";
+      $template_file_path = "../templates/web.config.txt";
       $template_file = fopen($template_file_path, "r");
       if ($template_file) {
     
         $template = fread($template_file, filesize($template_file_path));
         fclose($template_file);
     
-        $template = str_replace("{{base_url}}", Utilities::base_url(), $template);
+        $template = str_replace("{{base_url}}", $this->base_url(), $template);
     
-        $destination_file_path = Utilities::root_path() . "/web.config";
+        $destination_file_path = $this->root_path() . "/web.config";
         if (!file_exists($destination_file_path)) {
     
           $destination_file = fopen($destination_file_path, 'w+');
@@ -283,14 +279,14 @@ class Install {
 
       if ($type == "web") {
 
-        $template_file_path = Utilities::backtrace() . "templates/api/index.txt";
+        $template_file_path = "../templates/api/index.txt";
         $template_file = fopen($template_file_path, "r");
         if ($template_file) {
       
           $template = fread($template_file, filesize($template_file_path));
           fclose($template_file);
       
-          $destination_file_path = Utilities::root_path() . "/api/index.php";
+          $destination_file_path = $this->root_path() . "/api/index.php";
           if (!file_exists($destination_file_path)) {
       
             $destination_file = fopen($destination_file_path, 'w+');
@@ -315,23 +311,28 @@ class Install {
           array_push($errors, $this->translation->translate("Template file not found"));
         }
 
-        $template_file_path = Utilities::backtrace() . "templates/api/htaccess.txt";
+        $template_file_path = "../templates/api/htaccess.txt";
         $template_file = fopen($template_file_path, "r");
         if ($template_file) {
       
           $template = fread($template_file, filesize($template_file_path));
           fclose($template_file);
     
-          $rewrite_base_url = implode('/', 
-            array_intersect(
-              explode("/", __DIR__),
-              explode("/", $_SERVER["REQUEST_URI"])
-            )
-          ) . "/";
+          $rewrite_base_url = 
+          str_replace(
+            "/vendor/abstracts/core/src/Helpers/install",
+            "",
+            implode('/', 
+              array_intersect(
+                explode("/", __DIR__),
+                explode("/", $_SERVER["REQUEST_URI"])
+              )
+            ) . "/"
+            );
       
           $template = str_replace("{{rewrite_base_url}}", $rewrite_base_url, $template);
       
-          $destination_file_path = Utilities::root_path() . "/api/.htaccess";
+          $destination_file_path = $this->root_path() . "/api/.htaccess";
           if (!file_exists($destination_file_path)) {
       
             $destination_file = fopen($destination_file_path, 'w+');
@@ -356,16 +357,16 @@ class Install {
           array_push($errors, $this->translation->translate("Template file not found"));
         }
       
-        $template_file_path = Utilities::backtrace() . "templates/api/web.config.txt";
+        $template_file_path = "../templates/api/web.config.txt";
         $template_file = fopen($template_file_path, "r");
         if ($template_file) {
       
           $template = fread($template_file, filesize($template_file_path));
           fclose($template_file);
       
-          $template = str_replace("{{base_url}}", Utilities::base_url() . "/api", $template);
+          $template = str_replace("{{base_url}}", $this->base_url() . "/api", $template);
       
-          $destination_file_path = Utilities::root_path() . "/api/web.config";
+          $destination_file_path = $this->root_path() . "/api/web.config";
           if (!file_exists($destination_file_path)) {
       
             $destination_file = fopen($destination_file_path, 'w+');
@@ -401,6 +402,41 @@ class Install {
       throw new Exception(implode(", ", $errors), 409);
     }
   
+  }
+
+  private static function root_path() {
+    return rtrim(
+      str_replace(
+        "vendor/abstracts/core/src/Helpers/install",
+        "",
+        implode('/', 
+          array_intersect(
+            explode("/", __DIR__),
+            explode("/", getcwd())
+          )
+        )
+      ),
+      "/"
+    );
+  }
+
+  private static function base_url() {
+    return 
+    str_replace(
+      "/vendor/abstracts/core/src/Helpers/install",
+      "",
+      (
+        (isset($_SERVER["HTTPS"]) && $_SERVER["HTTPS"] === "on" ? "https" : "http") 
+        . "://" 
+        . $_SERVER["HTTP_HOST"]
+        . implode('/', 
+          array_intersect(
+            explode("/", __DIR__),
+            explode("/", $_SERVER["REQUEST_URI"])
+          )
+        )
+      )
+    );
   }
 
 }
