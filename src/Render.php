@@ -7,6 +7,7 @@ use \Abstracts\Helpers\Utilities;
 use \Abstracts\Helpers\Translation;
 
 use \Abstracts\Built;
+use \Abstracts\Page;
 
 use Exception;
 
