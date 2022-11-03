@@ -59,6 +59,9 @@ class API {
     $this->lock = new Lock($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
+    $this->log = new Log($this->session, 
+      Utilities::override_controls(true, true, true, true)
+    );
 
   }
 
