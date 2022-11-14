@@ -492,13 +492,6 @@ class Log {
 
   function format($data, $return_references = false, $referers = null) {
     if (!empty($data)) {
-      
-      if ($data->active === "1") {
-        $data->active = true;
-      } else if ($data->active === "0" || empty($data->active)) {
-        $data->active = false;
-      }
-
       if (is_array($referers) && !empty($referers)) {
         if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
           if (isset($referers["user_id"])) {
@@ -512,7 +505,6 @@ class Log {
           }
         }
       }
-
     }
 		return $data;
   }
