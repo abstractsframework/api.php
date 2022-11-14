@@ -481,6 +481,9 @@ class Log {
     $data = array();
     
     if (!empty($return_references)) {
+      if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+        $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
+      }
       if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
         $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
       }
@@ -492,7 +495,26 @@ class Log {
 
   function format($data, $return_references = false, $referers = null) {
     if (!empty($data)) {
+
+      if (isset($data->content_hash) && !empty($data->content_hash)) {
+        if (is_array(unserialize($data->content_hash))) {
+          $data->content_hash = unserialize($data->content_hash);
+        }
+      }
+
       if (is_array($referers) && !empty($referers)) {
+        if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+          if (isset($referers["module_id"])) {
+            $data->module_id_reference = $referers["module_id"]->format(
+              $this->database->get_reference(
+                $data->module_id, 
+                "module", 
+                "id"
+              ),
+              true
+            );
+          }
+        }
         if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
           if (isset($referers["user_id"])) {
             $data->user_id_reference = $referers["user_id"]->format(
