@@ -144,6 +144,7 @@ class Reference {
         $this->controls["view"]
       );
       if (!empty($data)) {
+        $referers = $this->refer($return_references);
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -153,7 +154,7 @@ class Reference {
           "id",
           $data->id
         );
-        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references));
+        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
       } else {
         return null;
       }
@@ -202,9 +203,10 @@ class Reference {
         $this->controls["view"]
       );
       if (!empty($list)) {
+        $referers = $this->refer($return_references);
         $data = array();
         foreach ($list as $value) {
-          array_push($data, $this->format($value, $return_references));
+          array_push($data, $this->format($value, $return_references, $referers));
         }
         $this->log->log(
           __FUNCTION__,
@@ -448,28 +450,45 @@ class Reference {
     return $parameters;
   }
 
-  function format($data, $return_references = false) {
+  function refer($return_references = false, $abstracts_override = null) {
+
+    $data = array();
+    
+    if (!empty($return_references)) {
+      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
+      }
+    }
+
+    return $this->callback(__METHOD__, func_get_args(), $data);
+
+  }
+
+  function format($data, $return_references = false, $referers = null) {
     if (!empty($data)) {
-      
+
       if ($data->active === "1") {
         $data->active = true;
       } else if ($data->active === "0" || empty($data->active)) {
         $data->active = false;
       }
 
-      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-        $data->user_id_reference = $this->format(
-          $this->database->get_reference(
-            $data->user_id, 
-            "user", 
-            "id"
-          ),
-          true
-        );
-      }
-
       if (isset($data->input_option_static_value) && !empty($data->input_option_static_value)) {
         $data->input_option_static_value = explode(",", $data->input_option_static_value);
+      }
+
+      if (is_array($referers) && !empty($referers)) {
+        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+          if (isset($referers["user_id"])) {
+            $data->user_id_reference = $referers["user_id"]->format(
+              $this->database->get_reference(
+                $data->user_id,
+                "user",
+                "id"
+              )
+            );
+          }
+        }
       }
 
     }

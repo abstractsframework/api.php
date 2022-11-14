@@ -1298,17 +1298,6 @@ class User {
         $data->active = false;
       }
 
-      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-        $data->user_id_reference = $this->format(
-          $this->database->get_reference(
-            $data->user_id, 
-            "user", 
-            "id"
-          ),
-          true
-        );
-      }
-
       if ($return_references === true || (is_array($return_references) && in_array("members", $return_references))) {
         if (!empty(
           $member_list = $this->database->select_multiple(
@@ -1438,6 +1427,17 @@ class User {
         }
         $data->image_reference->thumbnail = Utilities::get_thumbnail($data->image_reference->original);
         $data->image_reference->large = Utilities::get_large($data->image_reference->original);
+      }
+
+      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        $data->user_id_reference = $this->format(
+          $this->database->get_reference(
+            $data->user_id, 
+            "user", 
+            "id"
+          ),
+          true
+        );
       }
 
     }
