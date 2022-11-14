@@ -437,11 +437,24 @@ class Mail {
 
   function format($data, $return_references = false) {
     if (!empty($data)) {
+      
       if ($data->active === "1") {
         $data->active = true;
       } else if ($data->active === "0" || empty($data->active)) {
         $data->active = false;
       }
+
+      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        $data->user_id_reference = $this->format(
+          $this->database->get_reference(
+            $data->user_id, 
+            "user", 
+            "id"
+          ),
+          true
+        );
+      }
+
     }
 		return $data;
   }
