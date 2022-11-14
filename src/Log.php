@@ -61,7 +61,6 @@ class Log {
       if ($function == "get") {
         $result = $this->$function(
           (isset($parameters["id"]) ? $parameters["id"] : null),
-          (isset($parameters["active"]) ? $parameters["active"] : null),
           (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
         );
       } else if ($function == "list") {
@@ -70,7 +69,6 @@ class Log {
           (isset($parameters["limit"]) ? $parameters["limit"] : null), 
           (isset($parameters["sort_by"]) ? $parameters["sort_by"] : null), 
           (isset($parameters["sort_direction"]) ? $parameters["sort_direction"] : null), 
-          (isset($parameters["active"]) ? $parameters["active"] : null), 
           (isset($parameters) ? $parameters : null), 
           (isset($parameters["extensions"]) ? $parameters["extensions"] : null), 
           (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
@@ -79,7 +77,6 @@ class Log {
         $result = $this->$function(
           (isset($parameters["start"]) ? $parameters["start"] : null), 
           (isset($parameters["limit"]) ? $parameters["limit"] : null), 
-          (isset($parameters["active"]) ? $parameters["active"] : null), 
           (isset($parameters) ? $parameters : null), 
           (isset($parameters["extensions"]) ? $parameters["extensions"] : null)
         );
@@ -219,16 +216,12 @@ class Log {
 
   }
 
-  function get($id, $active = null, $return_references = false) {
+  function get($id, $return_references = false) {
     if ($this->validation->require($id, "ID")) {
 
-      $active = Initialize::active($active);
       $return_references = Initialize::return_references($return_references);
 
       $filters = array("id" => $id);
-      if (isset($active)) {
-        $filters["active"] = $active;
-      }
       $data = $this->database->select(
         "log", 
         "*", 
@@ -253,7 +246,6 @@ class Log {
     $limit = null, 
     $sort_by = "id", 
     $sort_direction = "desc", 
-    $active = null, 
     $filters = array(), 
     $extensions = array(),
     $return_references = false
@@ -263,7 +255,6 @@ class Log {
     $limit = Initialize::limit($limit);
     $sort_by = Initialize::sort_by($sort_by);
     $sort_direction = Initialize::sort_direction($sort_direction);
-    $active = Initialize::active($active);
     $filters = Initialize::filters($filters);
     $extensions = Initialize::extensions($extensions);
     $return_references = Initialize::return_references($return_references);
@@ -272,9 +263,6 @@ class Log {
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
-      if (isset($active)) {
-        $filters["active"] = $active;
-      }
       $list = $this->database->select_multiple(
         "log", 
         "*", 
@@ -304,14 +292,12 @@ class Log {
   function count(
     $start = null, 
     $limit = null, 
-    $active = null, 
     $filters = array(), 
     $extensions = array()
   ) {
 
     $start = Initialize::start($start);
     $limit = Initialize::limit($limit);
-    $active = Initialize::active($active);
     $filters = Initialize::filters($filters);
     $extensions = Initialize::extensions($extensions);
 
@@ -319,9 +305,6 @@ class Log {
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
-      if (isset($active)) {
-        $filters["active"] = $active;
-      }
       if (
         $data = $this->database->count(
           "log", 
@@ -334,7 +317,7 @@ class Log {
       ) {
         return $data;
       } else {
-        return null;
+        return 0;
       }
     } else {
       return null;
@@ -465,7 +448,6 @@ class Log {
         } else {
           $parameters["id"] = null;
         }
-        $parameters["active"] = (isset($parameters["active"]) ? $parameters["active"] : true);
         $parameters["user_id"] = (!empty($user_id) ? $user_id : (!empty($this->session) ? $this->session->id : 0));
         $parameters["create_at"] = gmdate("Y-m-d H:i:s");
       } else {

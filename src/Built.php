@@ -325,7 +325,6 @@ class Built {
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
-      
       if (isset($active)) {
         $filters["active"] = $active;
       }

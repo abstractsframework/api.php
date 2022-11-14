@@ -281,7 +281,7 @@ class Control {
       ) {
         return $data;
       } else {
-        return null;
+        return 0;
       }
     } else {
       return null;
