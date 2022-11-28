@@ -4,6 +4,8 @@ namespace Abstracts\Helpers;
 use \Abstracts\Helpers\Encryption;
 use \Abstracts\Helpers\Utilities;
 
+use Exception;
+
 use DateTimeZone;
 
 class Initialize {
@@ -126,7 +128,9 @@ class Initialize {
 
     $config = Initialize::config();
     if (!empty($config)) {
-      mb_internal_encoding($config["encoding"]);   
+      try {
+        mb_internal_encoding($config["encoding"]);  
+      } catch (Exception $e) {}
       date_default_timezone_set($config["timezone"]);
     }
     

@@ -383,7 +383,7 @@ class Built {
   function update($id, $parameters, $files = null) {
     
     /* initialize: parameters */
-    $parameters = $this->inform($parameters, true);
+    $parameters = $this->inform($parameters, $id);
     
     if ($this->validation->require($id, "ID")) {
 
@@ -430,7 +430,7 @@ class Built {
   function patch($id, $parameters, $files = null) {
 
     /* initialize: parameters */
-    $parameters = $this->inform($parameters, true);
+    $parameters = $this->inform($parameters, $id);
     
     if ($this->validation->require($id, "ID")) {
 
@@ -717,12 +717,12 @@ class Built {
             }
             if ($upload_result) {
     
+              $key = $reference->key;
               $parameter = $path;
               if (
                 $reference->type == "input-file-multiple"
                 || $reference->type == "input-file-multiple-drop"
               ) {
-                $key = $reference->key;
                 $parameter = array();
                 if (
                   $uploaded_data = $this->database->select(
@@ -790,19 +790,6 @@ class Built {
                     );
                   }
                 }
-
-                if (
-                  $reference->type == "input-file"
-                  || $reference->type == "image-upload"
-                ) {
-                  if (isset($data_target->logo) && !empty($data_target->logo)) {
-                    $file_old = str_replace($media_directory, $media_directory_path, $data_target->logo);
-                    if (!empty($file_old) && file_exists($file_old)) {
-                      chmod($file_old, 0777);
-                      unlink($file_old);
-                    }
-                  }
-                }
                 
                 return $path;
 
@@ -834,7 +821,7 @@ class Built {
                 for ($i = 0; $i < count($files[$key]["name"]); $i++) {
                   if (isset($files[$key]["name"][$i])) {
                     if (
-                      $path = $upload(
+                      $path_id = $upload(
                         $reference,
                         $data_current,
                         $reference->upload_folder,
@@ -845,6 +832,14 @@ class Built {
                         $files[$key]["size"][$i]
                       )
                     ) {
+                      $path = (object) array(
+                        "id" => $path_id,
+                        "name" => basename($path_id),
+                        "path" => null
+                      );
+                      if (strpos($path_id, "http://") !== 0 || strpos($path_id, "https://") !== 0) {
+                        $path->path = $this->config["base_url"] . $path_id;
+                      }
                       array_push($successes, array(
                         "source" => $files[$key]["name"][$i],
                         "destination" => $path
@@ -858,7 +853,19 @@ class Built {
             } else {
               if (isset($files[$key]) && isset($files[$key]["name"])) {
                 if (
-                  $path = $upload(
+                  $reference->type == "input-file"
+                  || $reference->type == "image-upload"
+                ) {
+                  if (isset($data_current->$key) && !empty($data_current->$key)) {
+                    try {
+                      $this->remove($data_current->id, array($key => $data_current->$key));
+                    } catch(Exception $e) {
+                      
+                    };
+                  }
+                }
+                if (
+                  $path_id = $upload(
                     $reference,
                     $data_current,
                     $reference->upload_folder,
@@ -869,9 +876,17 @@ class Built {
                     $files[$key]["size"]
                   )
                 ) {
+                  $path = (object) array(
+                    "id" => $path_id,
+                    "name" => basename($path_id),
+                    "path" => null
+                  );
+                  if (strpos($path_id, "http://") !== 0 || strpos($path_id, "https://") !== 0) {
+                    $path->path = $this->config["base_url"] . $path_id;
+                  }
                   array_push($successes, array(
                     "source" => $files[$key]["name"],
-                    "destination" => $path
+                    "destination" => $path_id
                   ));
                 } else {
                   array_push($errors, $files[$key]["name"]);
@@ -1094,7 +1109,8 @@ class Built {
         unset($parameters["create_at"]);
       }
       foreach ($this->abstracts->references as $reference) {
-        if (array_key_exists($reference->key, $parameters)) {
+        $key = $reference->key;
+        if (array_key_exists($key, $parameters)) {
           $inform_single = function($reference, $value) {
             if (in_array($reference->type, $this->multiple_types)) {
               if (
@@ -1111,10 +1127,10 @@ class Built {
                   return serialize(array());
                 }
               } else {
-                if (!empty($value)) {
+                if (!empty($value) && is_array($value)) {
                   return implode(",", $value);
                 } else {
-                  return "";
+                  return implode(",", array());
                 }
               }
             } else {
@@ -1123,25 +1139,69 @@ class Built {
           };
           if ($reference->type != "input-multiple") {
             if (in_array($reference->type, $this->file_types)) {
-              unset($parameters[$reference->key]);
               if (empty($update)) {
-                $parameters[$reference->key] = "";
+                $parameters[$key] = "";
+              } else {
+                if (empty($parameters[$key])) {
+                  if (!empty(
+                    $data_current = $this->database->select(
+                      (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                      array($key), 
+                      array("id" => $update), 
+                      null, 
+                      $this->controls["update"]
+                    )
+                  )) {
+                    $this->remove($update, array(
+                      $key => $data_current->$key
+                    ));
+                  }
+                  $parameters[$key] = $inform_single($reference, $parameters[$key]);
+                } else {
+                  unset($parameters[$key]);
+                }
               }
             } else {
-              $parameters[$reference->key] = $inform_single($reference, $parameters[$reference->key]);
+              $parameters[$key] = $inform_single($reference, $parameters[$key]);
             }
           } else {
-            $parameters[$reference->key] = serialize($parameters[$reference->key]);
+            $parameters[$key] = serialize($parameters[$key]);
             foreach ($reference->references as $reference_multiple) {
-              if (array_key_exists($reference_multiple->key, $parameters[$reference->key])) {
+              if (array_key_exists($reference_multiple->key, $parameters[$key])) {
                 if (in_array($reference_multiple->type, $this->file_types)) {
-                  unset($parameters[$reference->key][$reference_multiple->key]);
+                  unset($parameters[$key][$reference_multiple->key]);
                   if (empty($update)) {
-                    $parameters[$reference->key][$reference_multiple->key] = "";
+                    $parameters[$key][$reference_multiple->key] = "";
+                  } else {
+                    if (!empty(
+                      $data_current = $this->database->select(
+                        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                        array($key), 
+                        array("id" => $update), 
+                        null, 
+                        $this->controls["update"]
+                      )
+                    )) {
+                      if (!empty($data_current->$key)) {
+                        foreach (unserialize($data_current->$key) as $file) {
+                          if (!in_array($file, $parameters[$key])) {
+                            $this->remove($update, array(
+                              $key => $file
+                            ));
+                          }
+                        }
+                      }
+                    }
+                    if (empty($parameters[$key][$reference_multiple->key])) {
+                      $parameters[$key][$reference_multiple->key] 
+                      = $inform_single($reference_multiple, $parameters[$key][$reference_multiple->key]);
+                    } else {
+                      unset($parameters[$key][$reference_multiple->key]);
+                    }
                   }
                 } else {
-                  $parameters[$reference->key][$reference_multiple->key] 
-                  = $inform_single($reference_multiple, $parameters[$reference->key][$reference_multiple->key]);
+                  $parameters[$key][$reference_multiple->key] 
+                  = $inform_single($reference_multiple, $parameters[$key][$reference_multiple->key]);
                 }
               }
             }
