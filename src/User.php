@@ -20,7 +20,8 @@ class User {
   /* configuration */
   public $id = "6";
   public $public_functions = array(
-		"verify"
+		"verify",
+    "validate_username"
 	);
   public $module = null;
 
@@ -160,6 +161,11 @@ class User {
         $result = $this->$function(
           (isset($parameters["key"]) ? $parameters["key"] : null),
           (isset($parameters["value"]) ? $parameters["value"] : null)
+        );
+      } else if ($function == "validate_username") {
+        $result = $this->$function(
+          (isset($parameters["id"]) ? $parameters["id"] : null),
+          (isset($parameters["username"]) ? $parameters["username"] : null)
         );
       } else {
         throw new Exception($this->translation->translate("Function not supported"), 421);
@@ -534,6 +540,7 @@ class User {
           }
         }
       }
+      
       if (
         isset($user_id) && !empty($user_id)
         && isset($session_id) && !empty($session_id)
@@ -547,10 +554,13 @@ class User {
           false
         );
         if (!empty($data)) {
-          if ($this->update_device($data->id, $session_id)) {
-            $data->session_id = $session_id;
-            $session = $this->format($data, false, true);
+          try {
+            $this->update_device($data->id, $session_id);
+          } catch (Exception $e) {
+            throw new Exception($e->getMessage(), 400);
           }
+          $data->session_id = $session_id;
+          $session = $this->format($data, false, true);
         }
       } else {
         if ($throw_error) {
@@ -1236,6 +1246,19 @@ class User {
     }
   }
 
+  function validate_username($id = null, $username) {
+    try {
+      $this->validation->require($username, "Username");
+      $this->validation->string_min($username, "Username", 3);
+      $this->validation->string_max($username, "Username", 100);
+      $this->validation->no_special_characters($username, "Username");
+      $this->validation->unique($username, "Username", "username", "user", $id);
+      return true;
+    } catch (Exception $e) {
+      throw new Exception($this->translation->translate($e->getMessage()), $e->getCode());
+    }
+  }
+
   function inform($parameters, $update = false, $user_id = 0) {
     if (!empty($parameters)) {
       if (!$update) {
@@ -1323,13 +1346,53 @@ class User {
           if (!empty($controls) && is_array($controls)) {
             foreach ($controls as $controls_value) {
               $value = (array) $controls_value;
+              $control_arranged = $this->control->arrange((object) $value);
               if (isset($data[$value["module_id"]])) {
-                $data[$value["module_id"]] = array_merge(
-                  $data[$value["module_id"]],
-                  $this->control->arrange((object) $value)
-                );
+                if ($data[$value["module_id"]]["view"] !== true) {
+                  if ($data[$value["module_id"]]["view"] === false && is_array($control_arranged["view"])) {
+                    $data[$value["module_id"]]["view"] = $control_arranged["view"];
+                  } else if (is_array($data[$value["module_id"]]["view"]) && is_array($control_arranged["view"])) {
+                    $data[$value["module_id"]]["view"] = array_merge(
+                      $data[$value["module_id"]]["view"],
+                      $control_arranged["view"]
+                    );
+                  }
+                }
+                if ($data[$value["module_id"]]["create"] !== true) {
+                  if ($data[$value["module_id"]]["create"] === false && is_array($control_arranged["create"])) {
+                    $data[$value["module_id"]]["create"] = $control_arranged["create"];
+                  } else if (is_array($data[$value["module_id"]]["create"]) && is_array($control_arranged["create"])) {
+                    $data[$value["module_id"]]["create"] = array_merge(
+                      $data[$value["module_id"]]["create"],
+                      $control_arranged["create"]
+                    );
+                  }
+                }
+                if ($data[$value["module_id"]]["update"] !== true) {
+                  if ($data[$value["module_id"]]["update"] === false && is_array($control_arranged["update"])) {
+                    $data[$value["module_id"]]["update"] = $control_arranged["update"];
+                  } else if (is_array($data[$value["module_id"]]["update"]) && is_array($control_arranged["update"])) {
+                    $data[$value["module_id"]]["update"] = array_merge(
+                      $data[$value["module_id"]]["update"],
+                      $control_arranged["update"]
+                    );
+                  }
+                }
+                if ($data[$value["module_id"]]["delete"] !== true) {
+                  if ($data[$value["module_id"]]["delete"] === false && is_array($control_arranged["delete"])) {
+                    $data[$value["module_id"]]["delete"] = $control_arranged["delete"];
+                  } else if (is_array($data[$value["module_id"]]["delete"]) && is_array($control_arranged["delete"])) {
+                    $data[$value["module_id"]]["delete"] = array_merge(
+                      $data[$value["module_id"]]["delete"],
+                      $control_arranged["delete"]
+                    );
+                  }
+                }
               } else {
-                $data[$value["module_id"]] = $this->control->arrange((object) $value);
+                $data[$value["module_id"]]["view"] = $control_arranged["view"];
+                $data[$value["module_id"]]["create"] = $control_arranged["create"];
+                $data[$value["module_id"]]["update"] = $control_arranged["update"];
+                $data[$value["module_id"]]["delete"] = $control_arranged["delete"];
               }
             }
           }
@@ -1387,6 +1450,11 @@ class User {
         );
         if (!empty($control_list)) {
           $controls = $arrange_controls($control_list);
+          foreach ($control_list as $control_data) {
+            if ($control_data->module_id === "105") {
+              // var_dump($control_data);
+            }
+          }
         }
         if ($data->members) {
           for ($i = 0; $i < count($member_list); $i++) {

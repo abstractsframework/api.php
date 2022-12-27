@@ -484,7 +484,6 @@ class Database {
             }
             
             $query = "INSERT INTO `" . $table . "` (" . implode(", ", $keys) . ") VALUES (" . implode(", ", $values) . ");";
-    
             if (mysqli_query($connection, $query)) {
               $id = mysqli_insert_id($connection);
               $data = $this->select($table, "*", array("id" => $id), null, true, $clean_keys);
@@ -1132,7 +1131,7 @@ class Database {
         if (isset($value)) {
           if (is_string($value) || $value === "") {
             $value = "'" . $value . "'";
-          } else if (is_null($value)) {
+          } else if (is_null($value) || strtolower($value) === "null") {
             $value = "NULL";
           } else if (is_bool($value)) {
             $value = (!empty($value) ? "true" : "false");
@@ -1201,10 +1200,34 @@ class Database {
                 $key = implode(".", $key_parts);
               }
             }
-            array_push($data, 
-              (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "") 
-              . $key . " " . $extensions[$i]["operator"] . " " . $value
-            );
+            if (
+              $extensions[$i]["operator"] === "=" 
+              && (
+                is_null($extensions[$i]["value"])
+                || strtolower($extensions[$i]["value"]) === "null" 
+              )
+            ) {
+              array_push($data, 
+                (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "") 
+                . $key . " IS NULL"
+              );
+            } else if (
+              $extensions[$i]["operator"] === "!=" 
+              && (
+                is_null($extensions[$i]["value"])
+                || strtolower($extensions[$i]["value"]) === "null" 
+              )
+            ) {
+              array_push($data, 
+                (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "") 
+                . $key . " IS NOT NULL"
+              );
+            } else {
+              array_push($data, 
+                (trim($extensions[$i]["conjunction"]) ? trim($extensions[$i]["conjunction"]) . " " : "") 
+                . $key . " " . $extensions[$i]["operator"] . " " . $value
+              );
+            }
           }
         }
       }
