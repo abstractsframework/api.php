@@ -1450,11 +1450,6 @@ class User {
         );
         if (!empty($control_list)) {
           $controls = $arrange_controls($control_list);
-          foreach ($control_list as $control_data) {
-            if ($control_data->module_id === "105") {
-              // var_dump($control_data);
-            }
-          }
         }
         if ($data->members) {
           for ($i = 0; $i < count($member_list); $i++) {
