@@ -555,7 +555,7 @@ class Built {
     }
   }
 
-  function upload($id, $files) {
+  function upload($id, $files, $input_multiple = null) {
     if ($this->validation->require($id, "ID")) {
       
       if (!empty(
@@ -743,8 +743,8 @@ class Built {
               $parameters = array(
                 $reference->key => $parameter
               );
-              if (
-                $this->database->update(
+              if (empty($input_multiple)) {
+                $update_data = $this->database->update(
                   (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
                   $parameters, 
                   array("id" => $data_target->id), 
@@ -754,8 +754,9 @@ class Built {
                     true : 
                     array_merge($this->controls["create"], $this->controls["update"])
                   )
-                )
-              ) {
+                );
+              }
+              if (!empty($update_data) || !empty($input_multiple)) {
                 if ($reference->type == "image-upload" || $reference->file_type == "image") {
                   if (!empty($image_options["thumbnail"]) && !$unsupported_image) {
                     $thumbnail_directory_path	= $upload_directory_path . "thumbnail/";
@@ -800,6 +801,7 @@ class Built {
                 }
                 return false;
               }
+
             } else {
               return false;
             }
@@ -810,10 +812,30 @@ class Built {
 
         $successes = array();
         $errors = array();
-        foreach ($this->abstracts->references as $reference) {
-          if (in_array($reference->type, $this->file_types)) {
+
+        $references = $this->abstracts->references;
+        if (!empty($input_multiple)) {
+          $references = $input_multiple;
+        }
+        foreach ($references as $reference) {
+          if (
+            in_array($reference->type, $this->file_types)
+            || (
+              $reference->type == "input-multiple"
+              && !empty($input_multiple)
+            )
+          ) {
             $key = $reference->key;
-            if (
+            if ($reference->type == "input-multiple") {
+              if ($reference->references) {
+                try {
+                  $subreference_successes = $this->upload($id, $files[$key], $reference->references);
+                  array_push($successes, $subreference_successes);
+                } catch (Exception $e) {
+                  array_push($errors, $files[$key]);
+                };
+              }
+            } else if (
               $reference->type == "input-file-multiple"
               || $reference->type == "input-file-multiple-drop"
             ) {
@@ -859,7 +881,7 @@ class Built {
                   if (isset($data_current->$key) && !empty($data_current->$key)) {
                     try {
                       $this->remove($data_current->id, array($key => $data_current->$key));
-                    } catch(Exception $e) {
+                    } catch (Exception $e) {
                       
                     };
                   }

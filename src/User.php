@@ -1311,7 +1311,7 @@ class User {
     return $parameters;
   }
 
-  function format($data, $return_references = false, $return_authoritiy = false) {
+  function format($data, $return_references = false, $return_authoritiy = false, $recursive = false) {
 
     if (!empty($data)) {
 
@@ -1493,14 +1493,18 @@ class User {
       }
 
       if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-        $data->user_id_reference = $this->format(
-          $this->database->get_reference(
-            $data->user_id, 
-            "user", 
-            "id"
-          ),
-          true
-        );
+        if (!$recursive) {
+          $data->user_id_reference = $this->format(
+            $this->database->get_reference(
+              $data->user_id, 
+              "user", 
+              "id"
+            ),
+            true,
+            false,
+            true
+          );
+        }
       }
 
     }
