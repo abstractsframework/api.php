@@ -1257,7 +1257,7 @@ class Built {
       }
       if ($return_references === true || (is_array($return_references) && in_array("language_id", $return_references))) {
         if (!empty($this->abstracts->component_language)) {
-          $data["language_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
+          $data["language_id"] = new Language($this->session, Utilities::override_controls(true, true, true, true));
         }
       }
       if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
@@ -1267,7 +1267,7 @@ class Built {
       }
       if ($return_references === true || (is_array($return_references) && in_array("media_id", $return_references))) {
         if (!empty($this->abstracts->component_media)) {
-          $data["media_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
+          $data["media_id"] = new Media($this->session, Utilities::override_controls(true, true, true, true));
         }
       }
       foreach ($this->abstracts->references as $reference) {
@@ -1321,9 +1321,131 @@ class Built {
         $data->active = false;
       }
 
+      if (
+        $return_references === true || (
+          is_array($return_references) 
+          && is_array($return_references) && in_array("module_id", $return_references)
+          && is_array($referers) && !empty($referers) && isset($referers["module_id"]) && !empty($referers["module_id"])
+        )
+      ) {
+        if (isset($data->module_id)) {
+          $data->module_id_reference = null;
+          if (!empty($data->module_id)) {
+            $data->module_id_reference = $referers["module_id"]->format(
+              $this->database->get_reference(
+                $data->module_id,
+                "module",
+                "id"
+              )
+            );
+          }
+        }
+      }
+      if (
+        $return_references === true || (
+          is_array($return_references) 
+          && is_array($return_references) && in_array("user_id", $return_references)
+          && is_array($referers) && !empty($referers) && isset($referers["user_id"]) && !empty($referers["user_id"])
+        )
+      ) {
+        if (isset($data->user_id)) {
+          $data->user_id_reference = null;
+          if (!empty($data->user_id)) {
+            $data->user_id_reference = $referers["user_id"]->format(
+              $this->database->get_reference(
+                $data->user_id,
+                "user",
+                "id"
+              )
+            );
+          }
+        }
+      }
+      if (
+        $return_references === true || (
+          is_array($return_references) 
+          && is_array($return_references) && in_array("group_id", $return_references)
+          && is_array($referers) && !empty($referers) && isset($referers["group_id"]) && !empty($referers["group_id"])
+        )
+      ) {
+        if (isset($data->group_id)) {
+          $data->group_id_reference = null;
+          if (!empty($data->group_id)) {
+            $data->group_id_reference = $referers["group_id"]->format(
+              $this->database->get_reference(
+                $data->group_id,
+                "group",
+                "id"
+              )
+            );
+          }
+        }
+      }
+      if (
+        $return_references === true || (
+          is_array($return_references) 
+          && is_array($return_references) && in_array("language_id", $return_references)
+          && is_array($referers) && !empty($referers) && isset($referers["language_id"]) && !empty($referers["language_id"])
+        )
+      ) {
+        if (isset($data->language_id)) {
+          $data->language_id_reference = null;
+          if (!empty($data->language_id)) {
+            $data->language_id_reference = $referers["language_id"]->format(
+              $this->database->get_reference(
+                $data->language_id,
+                "language",
+                "id"
+              )
+            );
+          }
+        }
+      }
+      if (
+        $return_references === true || (
+          is_array($return_references) 
+          && is_array($return_references) && in_array("page_id", $return_references)
+          && is_array($referers) && !empty($referers) && isset($referers["page_id"]) && !empty($referers["page_id"])
+        )
+      ) {
+        if (isset($data->page_id)) {
+          $data->page_id_reference = null;
+          if (!empty($data->page_id)) {
+            $data->page_id_reference = $referers["page_id"]->format(
+              $this->database->get_reference(
+                $data->page_id,
+                "page",
+                "id"
+              )
+            );
+          }
+        }
+      }
+      if (
+        $return_references === true || (
+          is_array($return_references) 
+          && is_array($return_references) && in_array("media_id", $return_references)
+          && is_array($referers) && !empty($referers) && isset($referers["media_id"]) && !empty($referers["media_id"])
+        )
+      ) {
+        if (isset($data->media_id)) {
+          $data->media_id_reference = null;
+          if (!empty($data->media_id)) {
+            $data->media_id_reference = $referers["media_id"]->format(
+              $this->database->get_reference(
+                $data->media_id,
+                "media",
+                "id"
+              )
+            );
+          }
+        }
+      }
+
       foreach ($this->abstracts->references as $reference) {
         $key = $reference->key;
         $reference_key = $reference->key . "_reference";
+        $data->$reference_key = null;
         if (isset($data->$key)) {
 
           if (in_array($reference->type, $this->multiple_types)) {
