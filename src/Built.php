@@ -1650,7 +1650,7 @@ class Built {
   function simulate($module_id = null, $override_module = null) {
     $module_data = $override_module;
     if (empty($override_module)) {
-      $this->module_data = $this->database->select(
+      $module_data = $this->database->select(
         "module", 
         "*", 
         array("id" => $module_id), 

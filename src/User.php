@@ -823,7 +823,6 @@ class User {
       }
       $list = array();
       if (empty($groups)) {
-
         $list = $this->database->select_multiple(
           "user", 
           "*", 
@@ -835,7 +834,6 @@ class User {
           $sort_direction, 
           $this->controls["view"]
         );
-
       } else {
     
         $start = !empty($start) ? $start : null;
@@ -871,7 +869,7 @@ class User {
             $query = 
             "SELECT `user`.* FROM `user` 
             LEFT JOIN `member` ON (`user`.`id` = `member`.`user`) 
-            " . (!empty($conditions) ? $conditions . " AND " : "") .
+            " . (!empty($conditions) ? $conditions . " AND " : " WHERE ") .
             "(" . implode(" OR ", array_map(function ($group_id) { return  "`member`.`group_id` = '" . $group_id . "'"; }, $groups)) . ") 
             GROUP BY `user`.`id` "
             . $this->database->order($sort_by, $sort_direction) . " " . $this->database->limit($start, $limit) . ";";
@@ -943,6 +941,11 @@ class User {
     $active = Initialize::active($active);
     $filters = Initialize::filters($filters);
     $extensions = Initialize::extensions($extensions);
+    
+    if (!empty($filters) && isset($filters["groups"])) {
+      $groups = $filters["groups"];
+      unset($filters["groups"]);
+    }
 
     if (
       $this->validation->filters($filters) 
@@ -951,7 +954,7 @@ class User {
       if (isset($active)) {
         $filters["active"] = $active;
       }
-      if (
+      if (empty($groups)) {
         $data = $this->database->count(
           "user", 
           $filters, 
@@ -959,12 +962,76 @@ class User {
           $start, 
           $limit, 
           $this->controls["view"]
-        )
-      ) {
+        );
+      } else {
+    
+        $start = !empty($start) ? $start : null;
+        $limit = !empty($limit) ? $limit : null;
+        $sort_by = !empty($sort_by) ? $sort_by : "id";
+        $sort_direction = !empty($sort_direction) ? $sort_direction : "desc";
+        $active = !empty($active) ? $active : null;
+        $filters = is_array($filters) ? $filters : array();
+        $extensions = is_array($extensions) ? $extensions : array();
+        $fetch_type = !empty($fetch_type) ? $fetch_type : "assoc";
+        $controls_view = !empty($controls_view) ? $controls_view : false;
+        $controls = $this->controls["view"];
+        
+        if (!empty($controls)) {
+    
+          $connection = $this->database->connect();
+          if (!empty($connection)) {
+            
+            $error = false;
+    
+            $start = $this->database->escape_string($start, $connection);
+            $limit = $this->database->escape_string($limit, $connection);
+            $sort_by = $this->database->escape_string($sort_by, $connection);
+            $sort_direction = $this->database->escape_string($sort_direction, $connection);
+    
+            $conditions = $this->database->condition(
+              $this->database->escape_string($filters, $connection), 
+              $this->database->escape_string($extensions, $connection), 
+              $this->database->escape_string($controls, $connection),
+              "user"
+            );
+            
+            $query = 
+            "SELECT NULL FROM `user` 
+            LEFT JOIN `member` ON (`user`.`id` = `member`.`user`) 
+            " . (!empty($conditions) ? $conditions . " AND " : " WHERE ") .
+            "(" . implode(" OR ", array_map(function ($group_id) { return  "`member`.`group_id` = '" . $group_id . "'"; }, $groups)) . ") 
+            GROUP BY `user`.`id` "
+            . $this->database->limit($start, $limit) . ";";
+            
+            if ($result = mysqli_query($connection, $query)) {
+              $data = mysqli_num_rows($result);
+              mysqli_free_result($result);
+            } else {
+              $error = true;
+            }
+    
+            $this->database->disconnect($connection);
+    
+            if ($error) {
+              throw new Exception($this->translation->translate("Database encountered error"), 409);
+            }
+    
+          } else {
+            throw new Exception($this->translation->translate("Unable to connect to database"), 500);
+          }
+    
+        } else {
+          throw new Exception($this->translation->translate("Permission denied"), 403);
+        }
+
+      }
+
+      if ($data) {
         return $data;
       } else {
         return 0;
       }
+
     } else {
       return null;
     }
