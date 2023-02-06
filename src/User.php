@@ -1409,57 +1409,34 @@ class User {
   
       if ($return_authoritiy) {
         $arrange_controls = function($controls = array()) {
+          $control_behaviors = array("view", "create", "update", "delete");
           $data = array();
           if (!empty($controls) && is_array($controls)) {
             foreach ($controls as $controls_value) {
               $value = (array) $controls_value;
               $control_arranged = $this->control->arrange((object) $value);
-              if (isset($data[$value["module_id"]])) {
-                if ($data[$value["module_id"]]["view"] !== true) {
-                  if ($data[$value["module_id"]]["view"] === false && is_array($control_arranged["view"])) {
-                    $data[$value["module_id"]]["view"] = $control_arranged["view"];
-                  } else if (is_array($data[$value["module_id"]]["view"]) && is_array($control_arranged["view"])) {
-                    $data[$value["module_id"]]["view"] = array_merge(
-                      $data[$value["module_id"]]["view"],
-                      $control_arranged["view"]
-                    );
-                  }
-                }
-                if ($data[$value["module_id"]]["create"] !== true) {
-                  if ($data[$value["module_id"]]["create"] === false && is_array($control_arranged["create"])) {
-                    $data[$value["module_id"]]["create"] = $control_arranged["create"];
-                  } else if (is_array($data[$value["module_id"]]["create"]) && is_array($control_arranged["create"])) {
-                    $data[$value["module_id"]]["create"] = array_merge(
-                      $data[$value["module_id"]]["create"],
-                      $control_arranged["create"]
-                    );
-                  }
-                }
-                if ($data[$value["module_id"]]["update"] !== true) {
-                  if ($data[$value["module_id"]]["update"] === false && is_array($control_arranged["update"])) {
-                    $data[$value["module_id"]]["update"] = $control_arranged["update"];
-                  } else if (is_array($data[$value["module_id"]]["update"]) && is_array($control_arranged["update"])) {
-                    $data[$value["module_id"]]["update"] = array_merge(
-                      $data[$value["module_id"]]["update"],
-                      $control_arranged["update"]
-                    );
-                  }
-                }
-                if ($data[$value["module_id"]]["delete"] !== true) {
-                  if ($data[$value["module_id"]]["delete"] === false && is_array($control_arranged["delete"])) {
-                    $data[$value["module_id"]]["delete"] = $control_arranged["delete"];
-                  } else if (is_array($data[$value["module_id"]]["delete"]) && is_array($control_arranged["delete"])) {
-                    $data[$value["module_id"]]["delete"] = array_merge(
-                      $data[$value["module_id"]]["delete"],
-                      $control_arranged["delete"]
-                    );
-                  }
-                }
+              if (!array_key_exists($value["module_id"], $data)) {
+                $data[$value["module_id"]] = $control_arranged;
               } else {
-                $data[$value["module_id"]]["view"] = $control_arranged["view"];
-                $data[$value["module_id"]]["create"] = $control_arranged["create"];
-                $data[$value["module_id"]]["update"] = $control_arranged["update"];
-                $data[$value["module_id"]]["delete"] = $control_arranged["delete"];
+                foreach ($control_behaviors as $control_behavior) {
+                  if (!array_key_exists($control_behavior, $data[$value["module_id"]])) {
+                    $data[$value["module_id"]][$control_behavior] = $control_arranged[$control_behavior];
+                  } else {
+                    if ($control_arranged[$control_behavior] === true) {
+                      $data[$value["module_id"]][$control_behavior] = $control_arranged[$control_behavior];
+                    } else if ($data[$value["module_id"]][$control_behavior] !== true) {
+                      $controls_existed = $data[$value["module_id"]][$control_behavior];
+                      if (!is_array($data[$value["module_id"]][$control_behavior])) {
+                        $controls_existed = array($data[$value["module_id"]][$control_behavior]);
+                      }
+                      $controls_current = $control_arranged[$control_behavior];
+                      if (!is_array($control_arranged[$control_behavior])) {
+                        $controls_current = array($control_arranged[$control_behavior]);
+                      }
+                      $data[$value["module_id"]][$control_behavior] = array_merge($controls_existed, $controls_current);
+                    }
+                  }
+                }
               }
             }
           }
@@ -1510,7 +1487,7 @@ class User {
           null, 
           null, 
           null, 
-          "module_id", 
+          array("module_id"), 
           "asc", 
           true,
           false
