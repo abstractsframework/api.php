@@ -131,12 +131,13 @@ class User {
         $result = $this->$function(
           $parameters, 
           null,
-          (isset($parameters["groups"]) ? $parameters["groups"] : null)
+          $_FILES
         );
       } else if ($function == "update") {
         $result = $this->$function(
           (isset($parameters["id"]) ? $parameters["id"] : null),
-          (isset($parameters) ? $parameters : null)
+          (isset($parameters) ? $parameters : null),
+          $_FILES
         );
       } else if ($function == "delete") {
         $result = $this->$function(
@@ -145,7 +146,8 @@ class User {
       } else if ($function == "patch") {
         $result = $this->$function(
           (isset($parameters["id"]) ? $parameters["id"] : null),
-          (isset($parameters) ? $parameters : null)
+          (isset($parameters) ? $parameters : null),
+          $_FILES
         );
       } else if ($function == "upload") {
         $result = $this->$function(
@@ -1037,19 +1039,22 @@ class User {
     }
   }
 
-  function create($parameters, $user_id = 0, $groups) {
+  function create($parameters, $user_id = 0, $files) {
       
     /* initialize: parameters */
     $parameters = $this->inform($parameters, false, $user_id);
     if (!isset($parameters["username"]) || empty($parameters["username"])) {
       $parameters["username"] = $this->random_username();
     }
+    $groups = null;
+    if (isset($parameters["groups"])) {
+      $groups = array();
+      if (!empty($parameters["groups"])) {
+        $groups = (!is_array($parameters["groups"]) ? explode(",", $parameters["groups"]) : $parameters["groups"]);
+      }
+    }
 
     if ($this->validate($parameters)) {
-
-      if (!empty($groups)) {
-        $groups = (!is_array($groups) ? explode(",", $groups) : $groups);
-      }
     
       unset($parameters["confirm_password"]);
       unset($parameters["groups"]);
@@ -1059,65 +1064,72 @@ class User {
       $parameters["ndid_verified"] = 0;
       $parameters["face_verified"] = 0;
 
-      $error = false;
-
       $data = $this->database->insert(
         "user", 
         $parameters, 
         $this->controls["create"]
       );
       if (!empty($data)) {
-        if (!empty($_FILES)) {
-          // $this->upload($data->id, $_FILES);
-        }
-        if (!empty($groups)) {
-
-          $errors = array();
-
-          $group = new Group(
-            $this->session, 
-            Utilities::override_controls(
-              $this->controls["create"], 
-              $this->controls["create"], 
-              $this->controls["create"], 
-              $this->controls["create"]
-            )
-          );
-
-          foreach ($groups as $group_id) {
-            try {
-              $group->add_member($group_id, $data->id);
-            } catch (Exception $e) {
-              array_push($errors, $group_id);
-            }
+        $error = false;
+        if (!empty($files)) {
+          try {
+            $this->upload($data->id, $files);
+          } catch (Exception $e) {
+            $error = true;
           }
-
-          if (empty($errors)) {
-            if (!$error || empty($_FILES)) {
-              $this->log->log(
-                __FUNCTION__,
-                __METHOD__,
-                "normal",
-                func_get_args(),
-                (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-                "id",
-                $data->id
-              );
-              return $this->callback(
-                __METHOD__, 
-                func_get_args(), 
-                $this->format($data)
-              );
+        }
+        if (!is_null($groups)) {
+          if (
+            !empty($this->session) 
+            && isset($this->session->controls)
+            && isset($this->session->controls[7])
+            && isset($this->session->controls[7]["update"])
+            && $this->session->controls[7]["update"] === true
+          ) {
+            $errors = array();
+            $group = new Group(
+              $this->session, 
+              Utilities::override_controls(
+                $this->controls["create"], 
+                $this->controls["create"], 
+                $this->controls["create"], 
+                $this->controls["create"]
+              )
+            );
+            foreach ($groups as $group_id) {
+              try {
+                $group->add_member($group_id, $data->id);
+              } catch (Exception $e) {
+                array_push($errors, $group_id);
+              }
+            }
+            if (empty($errors)) {
+              if (!$error || empty($files)) {
+                $this->log->log(
+                  __FUNCTION__,
+                  __METHOD__,
+                  "normal",
+                  func_get_args(),
+                  (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                  "id",
+                  $data->id
+                );
+                return $this->callback(
+                  __METHOD__, 
+                  func_get_args(), 
+                  $this->format($data)
+                );
+              } else {
+                throw new Exception($this->translation->translate("Unable to upload"), 409);
+              }
             } else {
-              throw new Exception($this->translation->translate("Unable to upload"), 409);
+              throw new Exception($this->translation->translate("Unable to update member") . " '" . implode("', '", $errors) . "'", 409);
             }
           } else {
-            throw new Exception($this->translation->translate("Unable to add member") . " '" . implode("', '", $errors) . "'", 409);
+            throw new Exception($this->translation->translate("Permission denied"), 403);
           }
-
         } else {
-
-          if (!$error || empty($_FILES)) {
+          if (!$error || empty($files)) {
             $this->log->log(
               __FUNCTION__,
               __METHOD__,
@@ -1135,7 +1147,6 @@ class User {
           } else {
             throw new Exception($this->translation->translate("Unable to upload"), 409);
           }
-
         }
       } else {
         return $data;
@@ -1147,10 +1158,17 @@ class User {
 
   }
 
-  function update($id, $parameters) {
+  function update($id, $parameters, $files) {
 
     /* initialize: parameters */
     $parameters = $this->inform($parameters, true);
+    $groups = null;
+    if (isset($parameters["groups"])) {
+      $groups = array();
+      if (!empty($parameters["groups"])) {
+        $groups = (!is_array($parameters["groups"]) ? explode(",", $parameters["groups"]) : $parameters["groups"]);
+      }
+    }
 
     if ($this->validate($parameters, $id)) {
       $data = $this->database->update(
@@ -1162,23 +1180,109 @@ class User {
       );
       if (!empty($data)) {
         $data = $data[0];
-        if (!empty($_FILES)) {
-          // $this->upload($data->id, $_FILES);
+        $error = false;
+        if (!empty($files)) {
+          try {
+            $this->upload($data->id, $files);
+          } catch (Exception $e) {
+            $error = true;
+          }
         }
-        $this->log->log(
-          __FUNCTION__,
-          __METHOD__,
-          "normal",
-          func_get_args(),
-          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-          "id",
-          $data->id
-        );
-        return $this->callback(
-          __METHOD__, 
-          func_get_args(), 
-          $this->format($data)
-        );
+        if (!is_null($groups)) {
+          if (
+            !empty($this->session) 
+            && isset($this->session->controls)
+            && isset($this->session->controls[7])
+            && isset($this->session->controls[7]["update"])
+            && $this->session->controls[7]["update"] === true
+          ) {
+            if (!empty(
+              $data_current = $this->get($data->id, null, array("members"))
+            )) {
+              $errors = array();
+              $group = new Group(
+                $this->session, 
+                Utilities::override_controls(
+                  true, 
+                  true, 
+                  true, 
+                  true
+                )
+              );
+              foreach ($groups as $group_id) {
+                if (
+                  !in_array(
+                    $group_id,
+                    array_map(
+                      function($value) {
+                        return $value->group_id;
+                      }, $data_current->members
+                    )
+                  )
+                ) {
+                  try {
+                    $group->add_member($group_id, $data->id);
+                  } catch (Exception $e) {
+                    array_push($errors, $group_id);
+                  }
+                }
+              }
+              foreach ($data_current->members as $member) {
+                if (!in_array($member->group_id, $groups)) {
+                  try {
+                    $group->remove_member($member->group_id, $data->id);
+                  } catch (Exception $e) {
+                  }
+                }
+              }
+              if (empty($errors)) {
+                if (!$error || empty($files)) {
+                  $this->log->log(
+                    __FUNCTION__,
+                    __METHOD__,
+                    "normal",
+                    func_get_args(),
+                    (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                    "id",
+                    $data->id
+                  );
+                  return $this->callback(
+                    __METHOD__, 
+                    func_get_args(), 
+                    $this->format($data)
+                  );
+                } else {
+                  throw new Exception($this->translation->translate("Unable to upload"), 409);
+                }
+              } else {
+                throw new Exception($this->translation->translate("Unable to update member") . " '" . implode("', '", $errors) . "'", 409);
+              }
+            } else {
+              throw new Exception($this->translation->translate("Not found"), 404);
+            }
+          } else {
+            throw new Exception($this->translation->translate("Permission denied"), 403);
+          }
+        } else {
+          if (!$error || empty($files)) {
+            $this->log->log(
+              __FUNCTION__,
+              __METHOD__,
+              "normal",
+              func_get_args(),
+              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+              "id",
+              $data->id
+            );
+            return $this->callback(
+              __METHOD__, 
+              func_get_args(), 
+              $this->format($data)
+            );
+          } else {
+            throw new Exception($this->translation->translate("Unable to upload"), 409);
+          }
+        }
       } else {
         return $data;
       }
@@ -1188,14 +1292,24 @@ class User {
 
   }
 
-  function patch($id, $parameters) {
+  function patch($id, $parameters, $files) {
 
     /* initialize: parameters */
     $parameters = $this->inform($parameters, true);
+    $groups = null;
+    if (isset($parameters["groups"])) {
+      $groups = array();
+      if (!empty($parameters["groups"])) {
+        $groups = (!is_array($parameters["groups"]) ? explode(",", $parameters["groups"]) : $parameters["groups"]);
+      }
+    }
     
     if ($this->validation->require($id, "ID")) {
 
       if ($this->validate($parameters, $id, true)) {
+
+        $error = false;
+
         $data = $this->database->update(
           "user", 
           $parameters, 
@@ -1205,23 +1319,109 @@ class User {
         );
         if (!empty($data)) {
           $data = $data[0];
-          if (!empty($_FILES)) {
-            // $this->upload($data->id, $_FILES);
+          $error = false;
+          if (!empty($files)) {
+            try {
+              $this->upload($data->id, $files);
+            } catch (Exception $e) {
+              $error = true;
+            }
           }
-          $this->log->log(
-            __FUNCTION__,
-            __METHOD__,
-            "normal",
-            func_get_args(),
-            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-            "id",
-            $data->id
-          );
-          return $this->callback(
-            __METHOD__, 
-            func_get_args(), 
-            $this->format($data)
-          );
+          if (!is_null($groups)) {
+            if (
+              !empty($this->session) 
+              && isset($this->session->controls)
+              && isset($this->session->controls[7])
+              && isset($this->session->controls[7]["update"])
+              && $this->session->controls[7]["update"] === true
+            ) {
+              if (!empty(
+                $data_current = $this->get($data->id, null, array("members"))
+              )) {
+                $errors = array();
+                $group = new Group(
+                  $this->session, 
+                  Utilities::override_controls(
+                    true, 
+                    true, 
+                    true, 
+                    true
+                  )
+                );
+                foreach ($groups as $group_id) {
+                  if (
+                    !in_array(
+                      $group_id,
+                      array_map(
+                        function($value) {
+                          return $value->group_id;
+                        }, $data_current->members
+                      )
+                    )
+                  ) {
+                    try {
+                      $group->add_member($group_id, $data->id);
+                    } catch (Exception $e) {
+                      array_push($errors, $group_id);
+                    }
+                  }
+                }
+                foreach ($data_current->members as $member) {
+                  if (!in_array($member->group_id, $groups)) {
+                    try {
+                      $group->remove_member($member->group_id, $data->id);
+                    } catch (Exception $e) {
+                    }
+                  }
+                }
+                if (empty($errors)) {
+                  if (!$error || empty($files)) {
+                    $this->log->log(
+                      __FUNCTION__,
+                      __METHOD__,
+                      "normal",
+                      func_get_args(),
+                      (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                      "id",
+                      $data->id
+                    );
+                    return $this->callback(
+                      __METHOD__, 
+                      func_get_args(), 
+                      $this->format($data)
+                    );
+                  } else {
+                    throw new Exception($this->translation->translate("Unable to upload"), 409);
+                  }
+                } else {
+                  throw new Exception($this->translation->translate("Unable to update member") . " '" . implode("', '", $errors) . "'", 409);
+                }
+              } else {
+                throw new Exception($this->translation->translate("Not found"), 404);
+              }
+            } else {
+              throw new Exception($this->translation->translate("Permission denied"), 403);
+            }
+          } else {
+            if (!$error || empty($files)) {
+              $this->log->log(
+                __FUNCTION__,
+                __METHOD__,
+                "normal",
+                func_get_args(),
+                (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                "id",
+                $data->id
+              );
+              return $this->callback(
+                __METHOD__, 
+                func_get_args(), 
+                $this->format($data)
+              );
+            } else {
+              throw new Exception($this->translation->translate("Unable to upload"), 409);
+            }
+          }
         } else {
           return $data;
         }
@@ -1310,6 +1510,343 @@ class User {
       }
     } else {
       return null;
+    }
+  }
+
+  function upload($id, $files, $input_multiple = null) {
+    if ($this->validation->require($id, "ID")) {
+      
+      if (!empty(
+        $data_current = $this->database->select(
+          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+          "*", 
+          array("id" => $id), 
+          null, 
+          (
+            ($this->controls["create"] === true || $this->controls["update"] === true) ?
+            true : 
+            array_merge($this->controls["create"], $this->controls["update"])
+          )
+        )
+      )) {
+        
+        $upload = function(
+          $data_target, 
+          $destination = "", 
+          $name, 
+          $type, 
+          $tmp_name, 
+          $error, 
+          $size
+        ) {
+          
+          $image_options = array(
+            "quality" => (
+              (isset($this->config["image_quality"]) ? $this->config["image_quality"] : 75)
+            ),
+            "thumbnail" => (
+              (isset($this->config["image_thumbnail"]) ? $this->config["image_thumbnail"] : true)
+            ),
+            "thumbnail_aspectratio" => (
+              (isset($this->config["image_thumbnail_aspectratio"]) ? $this->config["image_thumbnail_aspectratio"] : 75)
+            ),
+            "thumbnail_quality" => (
+              (isset($this->config["image_thumbnail_quality"]) ? $this->config["image_thumbnail_quality"] : 75)
+            ),
+            "thumbnail_width" => (
+              (isset($this->config["image_thumbnail_width"]) ? $this->config["image_thumbnail_width"] : 200)
+            ),
+            "thumbnail_height" => (
+              (isset($this->config["image_thumbnail_height"]) ? $this->config["image_thumbnail_height"] : 200)
+            ),
+            "large" => (
+              (isset($this->config["image_large"]) ? $this->config["image_large"] : true)
+            ),
+            "large_aspectratio" => (
+              (isset($this->config["image_large_aspectratio"]) ? $this->config["image_large_aspectratio"] : 75)
+            ),
+            "large_quality" => (
+              (isset($this->config["image_large_quality"]) ? $this->config["image_large_quality"] : 75)
+            ),
+            "large_width" => (
+              (isset($this->config["image_large_width"]) ? $this->config["image_large_width"] : 400)
+            ),
+            "large_height" => (
+              (isset($this->config["image_large_height"]) ? $this->config["image_large_height"] : 400)
+            )
+          );
+          
+          $info = pathinfo($name);
+          $extension = strtolower(isset($info["extension"]) ? $info["extension"] : null);
+          if (empty($extension)) {
+            if (strpos($type, "image/") === 0) {
+              $extension = str_replace("image/", "", $type);
+            }
+          }
+          $basename = $info["basename"];
+          $file_name = $basename . "." . $extension;
+          $name_encrypted = gmdate("YmdHis") . "_" . $data_target->id . "_" . uniqid();
+          $file = $name_encrypted . "." . $extension;
+    
+          $media_directory = "/" . trim((isset($this->config["media_path"]) ? $this->config["media_path"] : "media"), "/") . "/";
+          $media_directory_path = Utilities::backtrace() . trim($media_directory, "/") . "/";
+
+          $upload_directory = $media_directory . trim($destination, "/") . "/";
+          $upload_directory_path = $media_directory_path . trim($destination, "/") . "/";
+          if (!file_exists($media_directory_path)) {
+            mkdir($media_directory_path, 0777, true);
+          }
+          if (!file_exists($upload_directory_path)) {
+            mkdir($upload_directory_path, 0777, true);
+          }
+          $destination = $upload_directory_path . $file;
+          $path = $upload_directory . $file;
+    
+          if (file_exists($upload_directory_path)) {
+            $upload_result = false;
+            $unsupported_image = false;
+            try {
+              $upload_result = Utilities::create_image(
+                $tmp_name, 
+                $destination, 
+                true,
+                640, 
+                640, 
+                null, 
+                $image_options["quality"]
+              );
+            } catch(Exception $e) {
+              if ($e->getCode() == 415 || $e->getCode() == 500) {
+                $upload_result = move_uploaded_file($tmp_name, $destination);
+                $unsupported_image = true;
+              }
+            }
+            if ($upload_result) {
+              
+              $parameter = $path;
+              $parameters = array(
+                "image" => $parameter
+              );
+              if (empty($input_multiple)) {
+                $update_data = $this->database->update(
+                  (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : "user"), 
+                  $parameters, 
+                  array("id" => $data_target->id), 
+                  null, 
+                  (
+                    ($this->controls["create"] === true || $this->controls["update"] === true) ?
+                    true : 
+                    array_merge($this->controls["create"], $this->controls["update"])
+                  )
+                );
+              }
+              if (!empty($update_data) || !empty($input_multiple)) {
+
+                if (!empty($image_options["thumbnail"]) && !$unsupported_image) {
+                  $thumbnail_directory_path	= $upload_directory_path . "thumbnail/";
+                  if (!file_exists($thumbnail_directory_path)) {
+                    mkdir($thumbnail_directory_path, 0777, true);
+                  }
+                  $thumbnail = $thumbnail_directory_path . $file;
+                  Utilities::create_image(
+                    $destination, 
+                    $thumbnail, 
+                    true,
+                    $image_options["thumbnail_width"], 
+                    $image_options["thumbnail_height"], 
+                    $image_options["thumbnail_aspectratio"], 
+                    $image_options["thumbnail_quality"]
+                  );
+                }
+                if (!empty($image_options["large"]) && !$unsupported_image) {
+                  $large_directory_path	= $upload_directory_path . "large/";
+                  if (!file_exists($large_directory_path)) {
+                    mkdir($large_directory_path, 0777, true);
+                  }
+                  $large = $large_directory_path . $file;
+                  Utilities::create_image(
+                    $destination, 
+                    $large, 
+                    true,
+                    $image_options["large_width"], 
+                    $image_options["large_height"], 
+                    $image_options["large_aspectratio"], 
+                    $image_options["large_quality"]
+                  );
+                }
+                
+                return $path;
+
+              } else {
+                if (file_exists($destination) && !is_dir($destination)) {
+                  chmod($destination, 0777);
+                  unlink($destination);
+                }
+                return false;
+              }
+
+            } else {
+              return false;
+            }
+          } else {
+            return false;
+          }
+        };
+
+        $successes = array();
+        $errors = array();
+
+        if (isset($files["image"]) && isset($files["image"]["name"])) {
+          if (isset($data_current->image) && !empty($data_current->image)) {
+            try {
+              $this->remove($data_current->id, array("image" => $data_current->image));
+            } catch (Exception $e) {
+              
+            };
+          }
+          if (
+            $path_id = $upload(
+              $data_current,
+              "user",
+              $files["image"]["name"],
+              $files["image"]["type"],
+              $files["image"]["tmp_name"],
+              $files["image"]["error"],
+              $files["image"]["size"]
+            )
+          ) {
+            $path = (object) array(
+              "id" => $path_id,
+              "name" => basename($path_id),
+              "path" => null
+            );
+            if (strpos($path_id, "http://") !== 0 || strpos($path_id, "https://") !== 0) {
+              $path->path = $this->config["base_url"] . $path_id;
+            }
+            array_push($successes, array(
+              "source" => $files["image"]["name"],
+              "destination" => $path_id
+            ));
+          } else {
+            array_push($errors, $files["image"]["name"]);
+          }
+        }
+        
+        if (empty($errors)) {
+          if (!empty($successes)) {
+            return $this->callback(__METHOD__, func_get_args(), $successes);
+          } else {
+            throw new Exception($this->translation->translate("No file has been uploaded"), 409);
+          }
+        } else {
+          throw new Exception($this->translation->translate("Unable to upload") . " '" . implode("', '", $errors) . "'", 409);
+        }
+
+      } else {
+        return null;
+      }
+
+    } else {
+      return null;
+    }
+  }
+
+  function remove($id, $parameters) {
+    if ($this->validation->require($id, "ID")) {
+      if (!empty($parameters)) {
+        
+        if (!empty(
+          $data_current = $this->database->select(
+            (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+            "*", 
+            array("id" => $id), 
+            null, 
+            (
+              ($this->controls["create"] === true || $this->controls["update"] === true || $this->controls["delete"] === true) ?
+              true : 
+              array_merge($this->controls["create"], $this->controls["update"], $this->controls["delete"])
+            )
+          )
+        )) {
+
+          $delete = function($file) {
+            try {
+              $file_old = Utilities::backtrace() . trim($file, "/");
+              if (!empty($file) && file_exists($file_old)) {
+                chmod($file_old, 0777);
+                unlink($file_old);
+              }
+              $thumbnail_old = Utilities::get_thumbnail($file_old);
+              if (file_exists($thumbnail_old) && !is_dir($thumbnail_old)) {
+                chmod($thumbnail_old, 0777);
+                unlink($thumbnail_old);
+              }
+              $large_old = Utilities::get_large($file_old);
+              if (file_exists($large_old) && !is_dir($large_old)) {
+                chmod($large_old, 0777);
+                unlink($large_old);
+              }
+              return true;
+            } catch(Exception $e) {
+              return false;
+            }
+          };
+
+          $successes = array();
+          $errors = array();
+
+          if (isset($parameters["image"])) {
+
+            if (is_array($parameters["image"])) {
+              foreach ($parameters["image"] as $file) {
+                if ($delete($file)) {
+                  array_push($successes, $file);
+                } else {
+                  array_push($errors, $file);
+                }
+              }
+            } else {
+              if ($delete($parameters["image"])) {
+                array_push($successes, $parameters["image"]);
+              } else {
+                array_push($errors, $parameters["image"]);
+              }
+            }
+
+            if (count($successes)) {
+              $parameter = "";
+              $parameters = array(
+                "image" => $parameter
+              );
+              $this->database->update(
+                (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : "user"), 
+                $parameters, 
+                array("id" => $data_current->id), 
+                null, 
+                (
+                  ($this->controls["create"] === true || $this->controls["update"] === true || $this->controls["delete"] === true) ?
+                  true : 
+                  array_merge($this->controls["create"], $this->controls["update"], $this->controls["delete"])
+                )
+              );
+              
+            }
+
+          }
+
+          if (empty($errors)) {
+            return $this->callback(__METHOD__, func_get_args(), $successes);
+          } else {
+            throw new Exception($this->translation->translate("Unable to delete") . " '" . implode("', '", $errors) . "'", 409);
+          }
+
+        } else {
+          throw new Exception($this->translation->translate("Not found"), 404);
+        }
+
+      } else {
+        throw new Exception($this->translation->translate("File(s) not found"), 404);
+      }
     }
   }
 

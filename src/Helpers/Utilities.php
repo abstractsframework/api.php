@@ -137,6 +137,9 @@ class Utilities {
 
   public static function handle_response($result) {
     $translation = new Translation();
+    if (is_object($result) && !(array) $result) {
+      throw new Exception($translation->translate("Not found"), 404);
+    }
     if (is_null($result) || (is_bool($result) && $result === false)) {
       throw new Exception($translation->translate("Unknown error"), 409);
     }
@@ -443,7 +446,7 @@ class Utilities {
 
     if ($resize) {
     
-      if ($target_height == null) {
+      if (is_null($target_height)) {
         $ratio = $width / $height;
         if ($width > $height) {
           $target_height = floor($target_width / $ratio);

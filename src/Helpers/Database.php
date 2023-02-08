@@ -113,7 +113,7 @@ class Database {
       if (!mysqli_select_db($connection, $name)) {
         $connection = false;
       } else {
-        if ($charset == null) {
+        if (empty($charset)) {
           $charset = strtolower($encoding);
         }
         if (!mysqli_set_charset($connection, str_replace("-", "", $charset))) {

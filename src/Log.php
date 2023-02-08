@@ -233,7 +233,7 @@ class Log {
         $referers = $this->refer($return_references);
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
       } else {
-        return null;
+        return (object) array();
       }
 
     } else {

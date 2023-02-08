@@ -235,7 +235,7 @@ class Built {
         $referers = $this->refer($return_references);
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
       } else {
-        return null;
+        return (object) array();
       }
 
     } else {
@@ -354,23 +354,32 @@ class Built {
         $this->controls["create"]
       );
       if (!empty($data)) {
+        $error = false;
         if (!empty($files)) {
-          $this->upload($data->id, $files);
+          try {
+            $this->upload($data->id, $files);
+          } catch (Exception $e) {
+            $error = true;
+          }
         }
-        $this->log->log(
-          __FUNCTION__,
-          __METHOD__,
-          "normal",
-          func_get_args(),
-          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-          "id",
-          $data->id
-        );
-        return $this->callback(
-          __METHOD__, 
-          func_get_args(), 
-          $this->format($data)
-        );
+        if (!$error || empty($files)) {
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
+          return $this->callback(
+            __METHOD__, 
+            func_get_args(), 
+            $this->format($data)
+          );
+        } else {
+          throw new Exception($this->translation->translate("Unable to upload"), 409);
+        }
       } else {
         return $data;
       }
@@ -397,26 +406,36 @@ class Built {
         );
         if (!empty($data)) {
           $data = $data[0];
+          $error = false;
           if (!empty($files)) {
-            $this->upload($data->id, $files);
+            try {
+              $this->upload($data->id, $files);
+            } catch (Exception $e) {
+              $error = true;
+            }
           }
-          $this->log->log(
-            __FUNCTION__,
-            __METHOD__,
-            "normal",
-            func_get_args(),
-            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-            "id",
-            $data->id
-          );
-          return $this->callback(
-            __METHOD__, 
-            func_get_args(), 
-            $this->format($data)
-          );
+          if (!$error || empty($files)) {
+            $this->log->log(
+              __FUNCTION__,
+              __METHOD__,
+              "normal",
+              func_get_args(),
+              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+              "id",
+              $data->id
+            );
+            return $this->callback(
+              __METHOD__, 
+              func_get_args(), 
+              $this->format($data)
+            );
+          } else {
+            throw new Exception($this->translation->translate("Unable to upload"), 409);
+          }
         } else {
           return $data;
         }
+
       } else {
         return null;
       }
@@ -444,23 +463,32 @@ class Built {
         );
         if (!empty($data)) {
           $data = $data[0];
+          $error = false;
           if (!empty($files)) {
-            $this->upload($data->id, $files);
+            try {
+              $this->upload($data->id, $files);
+            } catch (Exception $e) {
+              $error = true;
+            }
           }
-          $this->log->log(
-            __FUNCTION__,
-            __METHOD__,
-            "normal",
-            func_get_args(),
-            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-            "id",
-            $data->id
-          );
-          return $this->callback(
-            __METHOD__, 
-            func_get_args(), 
-            $this->format($data)
-          );
+          if (!$error || empty($files)) {
+            $this->log->log(
+              __FUNCTION__,
+              __METHOD__,
+              "normal",
+              func_get_args(),
+              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+              "id",
+              $data->id
+            );
+            return $this->callback(
+              __METHOD__, 
+              func_get_args(), 
+              $this->format($data)
+            );
+          } else {
+            throw new Exception($this->translation->translate("Unable to upload"), 409);
+          }
         } else {
           return $data;
         }
@@ -583,84 +611,52 @@ class Built {
           $size
         ) {
           
-          $image_options = array();
-          $image_options["quality"] = 75;
-          if (!empty($this->module)) {
-            $image_options["quality"] = (
+          $image_options = array(
+            "quality" => (
               !empty($reference->image_quality) ? $reference->image_quality 
-              : (isset($this->config["image_quality"]) ? $this->config["image_quality"] : $image_options["quality"])
-            );
-          }
-          $image_options["thumbnail"] = false;
-          if (!empty($this->module)) {
-            $image_options["thumbnail"] = (
+              : (isset($this->config["image_quality"]) ? $this->config["image_quality"] : 75)
+            ),
+            "thumbnail" => (
               !empty($reference->image_thumbnail) ? $reference->image_thumbnail 
-              : (isset($this->config["image_thumbnail"]) ? $this->config["image_thumbnail"] : $image_options["thumbnail"])
-            );
-          }
-          $image_options["thumbnail_aspectratio"] = 75;
-          if (!empty($this->module)) {
-            $image_options["thumbnail_aspectratio"] = (
+              : (isset($this->config["image_thumbnail"]) ? $this->config["image_thumbnail"] : false)
+            ),
+            "thumbnail_aspectratio" => (
               !empty($reference->image_thumbnail_aspectratio) ? $reference->image_thumbnail_aspectratio 
-              : (isset($this->config["image_thumbnail_aspectratio"]) ? $this->config["image_thumbnail_aspectratio"] : $image_options["thumbnail_aspectratio"])
-            );
-          }
-          $image_options["thumbnail_quality"] = 75;
-          if (!empty($this->module)) {
-            $image_options["thumbnail_quality"] = (
+              : (isset($this->config["image_thumbnail_aspectratio"]) ? $this->config["image_thumbnail_aspectratio"] : 75)
+            ),
+            "thumbnail_quality" => (
               !empty($reference->image_thumbnail_quality) ? $reference->image_thumbnail_quality 
-              : (isset($this->config["image_thumbnail_quality"]) ? $this->config["image_thumbnail_quality"] : $image_options["thumbnail_quality"])
-            );
-          }
-          $image_options["thumbnail_width"] = 200;
-          if (!empty($this->module)) {
-            $image_options["thumbnail_width"] = (
+              : (isset($this->config["image_thumbnail_quality"]) ? $this->config["image_thumbnail_quality"] : 75)
+            ),
+            "thumbnail_width" => (
               !empty($reference->image_thumbnail_width) ? $reference->image_thumbnail_width 
-              : (isset($this->config["image_thumbnail_width"]) ? $this->config["image_thumbnail_width"] : $image_options["thumbnail_width"])
-            );
-          }
-          $image_options["thumbnail_height"] = 200;
-          if (!empty($this->module)) {
-            $image_options["thumbnail_height"] = (
+              : (isset($this->config["image_thumbnail_width"]) ? $this->config["image_thumbnail_width"] : 200)
+            ),
+            "thumbnail_height" => (
               !empty($reference->image_thumbnail_height) ? $reference->image_thumbnail_height 
-              : (isset($this->config["image_thumbnail_height"]) ? $this->config["image_thumbnail_height"] : $image_options["thumbnail_height"])
-            );
-          }
-          $image_options["large"] = false;
-          if (!empty($this->module)) {
-            $image_options["large"] = (
+              : (isset($this->config["image_thumbnail_height"]) ? $this->config["image_thumbnail_height"] : 200)
+            ),
+            "large" => (
               !empty($reference->image_large) ? $reference->image_large 
-              : (isset($this->config["image_large"]) ? $this->config["image_large"] : $image_options["large"])
-            );
-          }
-          $image_options["large_aspectratio"] = 75;
-          if (!empty($this->module)) {
-            $image_options["large_aspectratio"] = (
+              : (isset($this->config["image_large"]) ? $this->config["image_large"] : false)
+            ),
+            "large_aspectratio" => (
               !empty($reference->image_large_aspectratio) ? $reference->image_large_aspectratio 
-              : (isset($this->config["image_large_aspectratio"]) ? $this->config["image_large_aspectratio"] : $image_options["large_aspectratio"])
-            );
-          }
-          $image_options["large_quality"] = 75;
-          if (!empty($this->module)) {
-            $image_options["large_quality"] = (
+              : (isset($this->config["image_large_aspectratio"]) ? $this->config["image_large_aspectratio"] : 75)
+            ),
+            "large_quality" => (
               !empty($reference->image_large_quality) ? $reference->image_large_quality 
-              : (isset($this->config["image_large_quality"]) ? $this->config["image_large_quality"] : $image_options["large_quality"])
-            );
-          }
-          $image_options["large_width"] = 200;
-          if (!empty($this->module)) {
-            $image_options["large_width"] = (
+              : (isset($this->config["image_large_quality"]) ? $this->config["image_large_quality"] : 75)
+            ),
+            "large_width" => (
               !empty($reference->image_large_width) ? $reference->image_large_width 
-              : (isset($this->config["image_large_width"]) ? $this->config["image_large_width"] : $image_options["large_width"])
-            );
-          }
-          $image_options["large_height"] = 200;
-          if (!empty($this->module)) {
-            $image_options["large_height"] = (
+              : (isset($this->config["image_large_width"]) ? $this->config["image_large_width"] : 400)
+            ),
+            "large_height" => (
               !empty($reference->image_large_height) ? $reference->image_large_height 
-              : (isset($this->config["image_large_height"]) ? $this->config["image_large_height"] : $image_options["large_height"])
-            );
-          }
+              : (isset($this->config["image_large_height"]) ? $this->config["image_large_height"] : 400)
+            )
+          );
           
           $info = pathinfo($name);
           $extension = strtolower(isset($info["extension"]) ? $info["extension"] : null);
@@ -1048,7 +1044,7 @@ class Built {
           if (empty($errors)) {
             return $this->callback(__METHOD__, func_get_args(), $successes);
           } else {
-            throw new Exception($this->translation->translate("Unable to delete") . " '" . implode("', '", $reference->key) . "'", 409);
+            throw new Exception($this->translation->translate("Unable to delete") . " '" . implode("', '", $errors) . "'", 409);
           }
 
         } else {
