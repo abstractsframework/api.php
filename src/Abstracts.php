@@ -490,7 +490,7 @@ class Abstracts {
         }
       } else {
         $error = true;
-        throw new Exception($this->translation->translate("File not found"), 404);
+        throw new Exception($this->translation->translate("File not found"), 400);
       }
       $this->database->disconnect($connection);
     }

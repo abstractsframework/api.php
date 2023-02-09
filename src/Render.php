@@ -38,9 +38,7 @@ class Render {
         
         $message = array(
           400 => $translation->translate("Bad request"),
-          404 => $translation->translate("Endpoint not found"),
-          405 => $translation->translate("Method not found"),
-          409 => $translation->translate("No response")
+          405 => $translation->translate("Module or method not found")
         );
         
         $request = Route::get_request();
@@ -70,7 +68,7 @@ class Render {
               }
             }
           } else {
-            throw new Exception($message[404], 404);
+            throw new Exception($message[405], 405);
           }
         } else {
           throw new Exception($message[400], 400);

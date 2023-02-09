@@ -1264,7 +1264,7 @@ class User {
                 throw new Exception($this->translation->translate("Unable to update member") . " '" . implode("', '", $errors) . "'", 409);
               }
             } else {
-              throw new Exception($this->translation->translate("Not found"), 404);
+              throw new Exception($this->translation->translate("Not exist or gone"), 410);
             }
           } else {
             throw new Exception($this->translation->translate("Permission denied"), 403);
@@ -1404,7 +1404,7 @@ class User {
                 throw new Exception($this->translation->translate("Unable to update member") . " '" . implode("', '", $errors) . "'", 409);
               }
             } else {
-              throw new Exception($this->translation->translate("Not found"), 404);
+              throw new Exception($this->translation->translate("Not exist or gone"), 410);
             }
           } else {
             throw new Exception($this->translation->translate("Permission denied"), 403);
@@ -1842,11 +1842,11 @@ class User {
           }
 
         } else {
-          throw new Exception($this->translation->translate("Not found"), 404);
+          throw new Exception($this->translation->translate("Not exist or gone"), 410);
         }
 
       } else {
-        throw new Exception($this->translation->translate("File(s) not found"), 404);
+        throw new Exception($this->translation->translate("File(s) not found"), 400);
       }
     } else {
       return false;

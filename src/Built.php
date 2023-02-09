@@ -1040,11 +1040,11 @@ class Built {
           }
 
         } else {
-          throw new Exception($this->translation->translate("Not found"), 404);
+          throw new Exception($this->translation->translate("Not exist or gone"), 410);
         }
 
       } else {
-        throw new Exception($this->translation->translate("File(s) not found"), 404);
+        throw new Exception($this->translation->translate("File(s) not found"), 400);
       }
     } else {
       return false;

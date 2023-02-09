@@ -898,7 +898,7 @@ class Database {
         }
         
       } else {
-        throw new Exception($this->translation->translate("Not found"), 404);
+        throw new Exception($this->translation->translate("Not exist or gone"), 410);
       }
 
     } else {
@@ -1577,7 +1577,7 @@ class Database {
       return $data;
       
     } else {
-      throw new Exception($this->translation->translate("Not found"), 404);
+      throw new Exception($this->translation->translate("Not exist or gone"), 410);
       return null;
     }
   }
