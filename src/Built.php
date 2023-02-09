@@ -156,15 +156,15 @@ class Built {
             (isset($parameters) ? $parameters : null),
             $_FILES
           );
-        } else if ($function == "delete") {
-          $result = $this->$function(
-            (isset($parameters["id"]) ? $parameters["id"] : null)
-          );
         } else if ($function == "patch") {
           $result = $this->$function(
             (isset($parameters["id"]) ? $parameters["id"] : null),
             (isset($parameters) ? $parameters : null),
             $_FILES
+          );
+        } else if ($function == "delete") {
+          $result = $this->$function(
+            (isset($parameters["id"]) ? $parameters["id"] : null)
           );
         } else if ($function == "upload") {
           $result = $this->$function(
@@ -235,11 +235,11 @@ class Built {
         $referers = $this->refer($return_references);
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
       } else {
-        return (object) array();
+        return null;
       }
 
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -303,7 +303,7 @@ class Built {
         return array();
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -338,7 +338,7 @@ class Built {
       );
       return $data;
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -384,7 +384,7 @@ class Built {
         return $data;
       }
     } else {
-      return null;
+      return false;
     }
 
   }
@@ -394,54 +394,51 @@ class Built {
     /* initialize: parameters */
     $parameters = $this->inform($parameters, $id);
     
-    if ($this->validation->require($id, "ID")) {
-
-      if ($this->validate($parameters, $id)) {
-        $data = $this->database->update(
-          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
-          $parameters, 
-          array("id" => $id), 
-          null, 
-          $this->controls["update"]
-        );
-        if (!empty($data)) {
-          $data = $data[0];
-          $error = false;
-          if (!empty($files)) {
-            try {
-              $this->upload($data->id, $files);
-            } catch (Exception $e) {
-              $error = true;
-            }
+    if (
+      $this->validation->require($id, "ID")
+      && $this->validate($parameters, $id)
+    ) {
+      $data = $this->database->update(
+        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        $parameters, 
+        array("id" => $id), 
+        null, 
+        $this->controls["update"]
+      );
+      if (!empty($data)) {
+        $data = $data[0];
+        $error = false;
+        if (!empty($files)) {
+          try {
+            $this->upload($data->id, $files);
+          } catch (Exception $e) {
+            $error = true;
           }
-          if (!$error || empty($files)) {
-            $this->log->log(
-              __FUNCTION__,
-              __METHOD__,
-              "normal",
-              func_get_args(),
-              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-              "id",
-              $data->id
-            );
-            return $this->callback(
-              __METHOD__, 
-              func_get_args(), 
-              $this->format($data)
-            );
-          } else {
-            throw new Exception($this->translation->translate("Unable to upload"), 409);
-          }
-        } else {
-          return $data;
         }
-
+        if (!$error || empty($files)) {
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
+          return $this->callback(
+            __METHOD__, 
+            func_get_args(), 
+            $this->format($data)
+          );
+        } else {
+          throw new Exception($this->translation->translate("Unable to upload"), 409);
+        }
       } else {
-        return null;
+        return $data;
       }
 
     } else {
-      return null;
+      return false;
     }
 
   }
@@ -451,67 +448,63 @@ class Built {
     /* initialize: parameters */
     $parameters = $this->inform($parameters, $id);
     
-    if ($this->validation->require($id, "ID")) {
-
-      if ($this->validate($parameters, $id, true)) {
-        $data = $this->database->update(
-          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
-          $parameters, 
-          array("id" => $id), 
-          null, 
-          $this->controls["update"]
-        );
-        if (!empty($data)) {
-          $data = $data[0];
-          $error = false;
-          if (!empty($files)) {
-            try {
-              $this->upload($data->id, $files);
-            } catch (Exception $e) {
-              $error = true;
-            }
+    if (
+      $this->validation->require($id, "ID")
+      && $this->validate($parameters, $id, true)
+    ) {
+      $data = $this->database->update(
+        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        $parameters, 
+        array("id" => $id), 
+        null, 
+        $this->controls["update"]
+      );
+      if (!empty($data)) {
+        $data = $data[0];
+        $error = false;
+        if (!empty($files)) {
+          try {
+            $this->upload($data->id, $files);
+          } catch (Exception $e) {
+            $error = true;
           }
-          if (!$error || empty($files)) {
-            $this->log->log(
-              __FUNCTION__,
-              __METHOD__,
-              "normal",
-              func_get_args(),
-              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-              "id",
-              $data->id
-            );
-            return $this->callback(
-              __METHOD__, 
-              func_get_args(), 
-              $this->format($data)
-            );
-          } else {
-            throw new Exception($this->translation->translate("Unable to upload"), 409);
-          }
+        }
+        if (!$error || empty($files)) {
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $data->id
+          );
+          return $this->callback(
+            __METHOD__, 
+            func_get_args(), 
+            $this->format($data)
+          );
         } else {
-          return $data;
+          throw new Exception($this->translation->translate("Unable to upload"), 409);
         }
       } else {
-        return null;
+        return $data;
       }
-
     } else {
-      return null;
+      return false;
     }
 
   }
 
   function delete($id) {
     if ($this->validation->require($id, "ID")) {
-      if (
-        $data = $this->database->delete(
-          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
-          array("id" => $id), 
-          null, 
-          $this->controls["delete"]
-        )
-      ) {
+      $data = $this->database->delete(
+        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        array("id" => $id), 
+        null, 
+        $this->controls["delete"]
+      );
+      if (!empty($data)) {
         $data = $data[0];
         foreach ($this->abstracts->references as $reference) {
           if (in_array($reference->type, $this->file_types)) {
@@ -576,29 +569,28 @@ class Built {
         );
 
       } else {
-        return null;
+        return $data;
       }
     } else {
-      return null;
+      return false;
     }
   }
 
   function upload($id, $files, $input_multiple = null) {
     if ($this->validation->require($id, "ID")) {
       
-      if (!empty(
-        $data_current = $this->database->select(
-          (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
-          "*", 
-          array("id" => $id), 
-          null, 
-          (
-            ($this->controls["create"] === true || $this->controls["update"] === true) ?
-            true : 
-            array_merge($this->controls["create"], $this->controls["update"])
-          )
+      $data_current = $this->database->select(
+        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+        "*", 
+        array("id" => $id), 
+        null, 
+        (
+          ($this->controls["create"] === true || $this->controls["update"] === true) ?
+          true : 
+          array_merge($this->controls["create"], $this->controls["update"])
         )
-      )) {
+      );
+      if (!empty($data_current)) {
         
         $upload = function(
           $reference, 
@@ -925,11 +917,11 @@ class Built {
         }
 
       } else {
-        return null;
+        return $data_current;
       }
 
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -1054,6 +1046,8 @@ class Built {
       } else {
         throw new Exception($this->translation->translate("File(s) not found"), 404);
       }
+    } else {
+      return false;
     }
   }
 
@@ -1107,7 +1101,7 @@ class Built {
         return array();
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -1800,7 +1794,7 @@ class Built {
       );
       return $abstracts_data;
     } else {
-      return null;
+      return $module_data;
     }
   }
 

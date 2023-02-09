@@ -122,14 +122,14 @@ class Group {
           (isset($parameters["id"]) ? $parameters["id"] : null),
           (isset($parameters) ? $parameters : null)
         );
-      } else if ($function == "delete") {
-        $result = $this->$function(
-          (isset($parameters["id"]) ? $parameters["id"] : null)
-        );
       } else if ($function == "patch") {
         $result = $this->$function(
           (isset($parameters["id"]) ? $parameters["id"] : null),
           (isset($parameters) ? $parameters : null)
+        );
+      } else if ($function == "delete") {
+        $result = $this->$function(
+          (isset($parameters["id"]) ? $parameters["id"] : null)
         );
       } else if ($function == "upload") {
         $result = $this->$function(
@@ -183,11 +183,11 @@ class Group {
         );
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
       } else {
-        return (object) array();
+        return null;
       }
 
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -249,7 +249,7 @@ class Group {
         return array();
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -289,7 +289,7 @@ class Group {
         return 0;
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -400,7 +400,7 @@ class Group {
       }
 
     } else {
-      return null;
+      return false;
     }
 
   }
@@ -410,7 +410,10 @@ class Group {
     /* initialize: parameters */
     $parameters = $this->inform($parameters, true);
 
-    if ($this->validate($parameters, $id)) {
+    if (
+      $this->validation->require($id, "ID")
+      && $this->validate($parameters, $id)
+    ) {
       $data = $this->database->update(
         "group", 
         $parameters, 
@@ -515,7 +518,7 @@ class Group {
         return $data;
       }
     } else {
-      return null;
+      return false;
     }
 
   }
@@ -525,132 +528,128 @@ class Group {
     /* initialize: parameters */
     $parameters = $this->inform($parameters, true);
     
-    if ($this->validation->require($id, "ID")) {
+    if (
+      $this->validation->require($id, "ID")
+      && $this->validate($parameters, $id, true)
+    ) {
+      $data = $this->database->update(
+        "group", 
+        $parameters, 
+        array("id" => $id), 
+        null, 
+        $this->controls["update"]
+      );
+      if (!empty($data)) {
 
-      if ($this->validate($parameters, $id, true)) {
-        $data = $this->database->update(
-          "group", 
-          $parameters, 
-          array("id" => $id), 
-          null, 
-          $this->controls["update"]
-        );
-        if (!empty($data)) {
+        $data = $data[0];
 
-          $data = $data[0];
-
-          if (!empty($data->controls)) {
-            $controls = unserialize($data->controls);
-            foreach ($controls as $control) {
-              $member_list = $this->database->select_multiple(
-                "member", 
-                "*", 
-                array("group_id" => $data->id), 
-                null, 
-                null, 
-                null, 
-                "id", 
-                "asc", 
-                false,
-                false
+        if (!empty($data->controls)) {
+          $controls = unserialize($data->controls);
+          foreach ($controls as $control) {
+            $member_list = $this->database->select_multiple(
+              "member", 
+              "*", 
+              array("group_id" => $data->id), 
+              null, 
+              null, 
+              null, 
+              "id", 
+              "asc", 
+              false,
+              false
+            );
+            foreach ($member_list as $member_data) {
+              $control_parameters = array(
+                "id" => null,
+                "user" => $member_data->user,
+                "rules" => $control["rules"],
+                "behaviors" => $control["behaviors"],
+                "create_at" => gmdate("Y-m-d H:i:s"),
+                "active" => true,
+                "module_id" => $control["module_id"],
+                "group_id" => $data->id,
+                "user_id" => (!empty($this->session) ? $this->session->id : 0)
               );
-              foreach ($member_list as $member_data) {
-                $control_parameters = array(
-                  "id" => null,
-                  "user" => $member_data->user,
-                  "rules" => $control["rules"],
-                  "behaviors" => $control["behaviors"],
-                  "create_at" => gmdate("Y-m-d H:i:s"),
-                  "active" => true,
-                  "module_id" => $control["module_id"],
-                  "group_id" => $data->id,
-                  "user_id" => (!empty($this->session) ? $this->session->id : 0)
-                );
-                $controls_filters = array(
-                  "user" => $member_data->user,
-                  "module_id" => $control_parameters["module_id"]
-                );
-                $controls_extensions = array(
-                  array(
-                    "conjunction" => "",
-                    "key" => "rules",
-                    "operator" => "LIKE",
-                    "value" => "'%" . $control_parameters["rules"] . "%'"
-                  ),
-                  array(
-                    "conjunction" => "AND",
-                    "key" => "behaviors",
-                    "operator" => "LIKE",
-                    "value" => "'%" . $control_parameters["behaviors"] . "%'"
-                  )
-                );
+              $controls_filters = array(
+                "user" => $member_data->user,
+                "module_id" => $control_parameters["module_id"]
+              );
+              $controls_extensions = array(
+                array(
+                  "conjunction" => "",
+                  "key" => "rules",
+                  "operator" => "LIKE",
+                  "value" => "'%" . $control_parameters["rules"] . "%'"
+                ),
+                array(
+                  "conjunction" => "AND",
+                  "key" => "behaviors",
+                  "operator" => "LIKE",
+                  "value" => "'%" . $control_parameters["behaviors"] . "%'"
+                )
+              );
+              if (empty(
+                $this->database->select_multiple(
+                  "control", 
+                  "*", 
+                  $controls_filters,
+                  $controls_extensions,
+                  null,
+                  null,
+                  null,
+                  null,
+                  null,
+                  false
+                )
+              )) {
                 if (empty(
-                  $this->database->select_multiple(
+                  $this->database->insert(
                     "control", 
-                    "*", 
-                    $controls_filters,
-                    $controls_extensions,
-                    null,
-                    null,
-                    null,
-                    null,
-                    null,
+                    $control_parameters, 
+                    true,
                     false
                   )
                 )) {
-                  if (empty(
-                    $this->database->insert(
-                      "control", 
-                      $control_parameters, 
-                      true,
-                      false
-                    )
-                  )) {
-                    array_push($errors, $control_parameters);
-                  }
+                  array_push($errors, $control_parameters);
                 }
               }
             }
           }
-
-          $this->log->log(
-            __FUNCTION__,
-            __METHOD__,
-            "normal",
-            func_get_args(),
-            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-            "id",
-            $data->id
-          );
-          return $this->callback(
-            __METHOD__, 
-            func_get_args(), 
-            $this->format($data)
-          );
-
-        } else {
-          return $data;
         }
-      } else {
-        return null;
-      }
 
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
+        );
+        return $this->callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data)
+        );
+
+      } else {
+        return $data;
+      }
     } else {
-      return null;
+      return false;
     }
 
   }
 
   function delete($id) {
     if ($this->validation->require($id, "ID")) {
-      if (
-        $data = $this->database->delete(
-          "group", 
-          array("id" => $id), 
-          null, 
-          $this->controls["delete"]
-        )
-      ) {
+      $data = $this->database->delete(
+        "group", 
+        array("id" => $id), 
+        null, 
+        $this->controls["delete"]
+      );
+      if (!empty($data)) {
 
         $data = $data[0];
 
@@ -688,10 +687,10 @@ class Group {
         );
 
       } else {
-        return null;
+        return $data;
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -831,7 +830,7 @@ class Group {
         return array();
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -951,7 +950,7 @@ class Group {
       }
       
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -960,15 +959,14 @@ class Group {
       $this->validation->require($id, "ID")
       && $this->validation->require($member_user_id, "User ID")
     ) {
-      if (
-        $data = $this->database->delete(
-          "member", 
-          array("group_id" => $id, "user" => $member_user_id), 
-          null, 
-          $this->controls["delete"],
-          false
-        )
-      ) {
+      $data = $this->database->delete(
+        "member", 
+        array("group_id" => $id, "user" => $member_user_id), 
+        null, 
+        $this->controls["delete"],
+        false
+      );
+      if (!empty($data)) {
 
         $data = $data[0];
 
@@ -986,10 +984,10 @@ class Group {
         );
 
       } else {
-        return null;
+        return $data;
       }
     } else {
-      return null;
+      return false;
     }
   }
 

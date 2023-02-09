@@ -137,10 +137,10 @@ class Utilities {
 
   public static function handle_response($result) {
     $translation = new Translation();
-    if (is_object($result) && !(array) $result) {
+    if (is_null($result)) {
       throw new Exception($translation->translate("Not found"), 404);
     }
-    if (is_null($result) || (is_bool($result) && $result === false)) {
+    if (is_bool($result) && $result === false) {
       throw new Exception($translation->translate("Unknown error"), 409);
     }
     if (!is_array($result) && !is_object($result)) {

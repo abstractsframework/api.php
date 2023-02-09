@@ -195,19 +195,20 @@ class Log {
           "module_key" => $module_key,
           "module_value" => $module_value
         );
-    
-        if (!empty($data = $this->create($parameters))) {
+
+        $data = $this->create($parameters);
+        if (!empty($data)) {
           return $this->callback(
             __METHOD__, 
             func_get_args(), 
             $data
           );
         } else {
-          return false;
+          return $data;
         }
 
       } else {
-        return false;
+        return $log;
       }
 
     } catch (Exception $e) {
@@ -233,11 +234,11 @@ class Log {
         $referers = $this->refer($return_references);
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
       } else {
-        return (object) array();
+        return null;
       }
 
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -285,7 +286,7 @@ class Log {
         return array();
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -320,7 +321,7 @@ class Log {
         return 0;
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -347,7 +348,7 @@ class Log {
       }
 
     } else {
-      return null;
+      return false;
     }
 
   }
@@ -357,7 +358,10 @@ class Log {
     /* initialize: parameters */
     $parameters = $this->inform($parameters, true);
 
-    if ($this->validate($parameters, $id)) {
+    if (
+      $this->validation->require($id, "ID")
+      && $this->validate($parameters, $id)
+    ) {
       $data = $this->database->update(
         "log", 
         $parameters, 
@@ -376,7 +380,7 @@ class Log {
         return $data;
       }
     } else {
-      return null;
+      return false;
     }
 
   }
@@ -386,46 +390,18 @@ class Log {
     /* initialize: parameters */
     $parameters = $this->inform($parameters, true);
     
-    if ($this->validation->require($id, "ID")) {
-
-      if ($this->validate($parameters, $id, true)) {
-        $data = $this->database->update(
-          "log", 
-          $parameters, 
-          array("id" => $id), 
-          null, 
-          $this->controls["update"]
-        );
-        if (!empty($data)) {
-          $data = $data[0];
-          return $this->callback(
-            __METHOD__, 
-            func_get_args(), 
-            $this->format($data)
-          );
-        } else {
-          return $data;
-        }
-      } else {
-        return null;
-      }
-
-    } else {
-      return null;
-    }
-
-  }
-
-  function delete($id) {
-    if ($this->validation->require($id, "ID")) {
-      if (
-        $data = $this->database->delete(
-          "log", 
-          array("id" => $id), 
-          null, 
-          $this->controls["delete"]
-        )
-      ) {
+    if (
+      $this->validation->require($id, "ID")
+      && $this->validate($parameters, $id, true)
+    ) {
+      $data = $this->database->update(
+        "log", 
+        $parameters, 
+        array("id" => $id), 
+        null, 
+        $this->controls["update"]
+      );
+      if (!empty($data)) {
         $data = $data[0];
         return $this->callback(
           __METHOD__, 
@@ -433,10 +409,34 @@ class Log {
           $this->format($data)
         );
       } else {
-        return null;
+        return $data;
       }
     } else {
-      return null;
+      return false;
+    }
+
+  }
+
+  function delete($id) {
+    if ($this->validation->require($id, "ID")) {
+      $data = $this->database->delete(
+        "log", 
+        array("id" => $id), 
+        null, 
+        $this->controls["delete"]
+      );
+      if (!empty($data)) {
+        $data = $data[0];
+        return $this->callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data)
+        );
+      } else {
+        return $data;
+      }
+    } else {
+      return false;
     }
   }
 

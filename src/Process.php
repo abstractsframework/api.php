@@ -95,14 +95,14 @@ class Process {
           (isset($parameters["id"]) ? $parameters["id"] : null),
           (isset($parameters) ? $parameters : null)
         );
-      } else if ($function == "delete") {
-        $result = $this->$function(
-          (isset($parameters["id"]) ? $parameters["id"] : null)
-        );
       } else if ($function == "patch") {
         $result = $this->$function(
           (isset($parameters["id"]) ? $parameters["id"] : null),
           (isset($parameters) ? $parameters : null)
+        );
+      } else if ($function == "delete") {
+        $result = $this->$function(
+          (isset($parameters["id"]) ? $parameters["id"] : null)
         );
       } else if ($function == "upload") {
         $result = $this->$function(
@@ -156,11 +156,11 @@ class Process {
         );
         return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
       } else {
-        return (object) array();
+        return null;
       }
 
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -222,7 +222,7 @@ class Process {
         return array();
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -262,7 +262,7 @@ class Process {
         return 0;
       }
     } else {
-      return null;
+      return false;
     }
   }
 
@@ -299,7 +299,7 @@ class Process {
       }
 
     } else {
-      return null;
+      return false;
     }
 
   }
@@ -309,7 +309,10 @@ class Process {
     /* initialize: parameters */
     $parameters = $this->inform($parameters, true);
 
-    if ($this->validate($parameters, $id)) {
+    if (
+      $this->validation->require($id, "ID")
+      && $this->validate($parameters, $id)
+    ) {
       $data = $this->database->update(
         "process", 
         $parameters, 
@@ -337,7 +340,7 @@ class Process {
         return $data;
       }
     } else {
-      return null;
+      return false;
     }
 
   }
@@ -347,55 +350,51 @@ class Process {
     /* initialize: parameters */
     $parameters = $this->inform($parameters, true);
     
-    if ($this->validation->require($id, "ID")) {
-
-      if ($this->validate($parameters, $id, true)) {
-        $data = $this->database->update(
-          "process", 
-          $parameters, 
-          array("id" => $id), 
-          null, 
-          $this->controls["update"]
+    if (
+      $this->validation->require($id, "ID")
+      && $this->validate($parameters, $id, true)
+    ) {
+      $data = $this->database->update(
+        "process", 
+        $parameters, 
+        array("id" => $id), 
+        null, 
+        $this->controls["update"]
+      );
+      if (!empty($data)) {
+        $data = $data[0];
+        $this->log->log(
+          __FUNCTION__,
+          __METHOD__,
+          "normal",
+          func_get_args(),
+          (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+          "id",
+          $data->id
         );
-        if (!empty($data)) {
-          $data = $data[0];
-          $this->log->log(
-            __FUNCTION__,
-            __METHOD__,
-            "normal",
-            func_get_args(),
-            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-            "id",
-            $data->id
-          );
-          return $this->callback(
-            __METHOD__, 
-            func_get_args(), 
-            $this->format($data)
-          );
-        } else {
-          return $data;
-        }
+        return $this->callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data)
+        );
       } else {
-        return null;
+        return $data;
       }
-
     } else {
-      return null;
+      return false;
     }
 
   }
 
   function delete($id) {
     if ($this->validation->require($id, "ID")) {
-      if (
-        $data = $this->database->delete(
-          "process", 
-          array("id" => $id), 
-          null, 
-          $this->controls["delete"]
-        )
-      ) {
+      $data = $this->database->delete(
+        "process", 
+        array("id" => $id), 
+        null, 
+        $this->controls["delete"]
+      );
+      if (!empty($data)) {
         $data = $data[0];
         $this->log->log(
           __FUNCTION__,
@@ -412,10 +411,10 @@ class Process {
           $this->format($data)
         );
       } else {
-        return null;
+        return $data;
       }
     } else {
-      return null;
+      return false;
     }
   }
 
