@@ -8,6 +8,9 @@ class Translation {
   public $enable = true;
   public $language = "en";
 
+  /* core */
+  private $config = null;
+
   function __construct($language = "en", $enable = true) {
 
     /* initialize: core */
@@ -25,10 +28,14 @@ class Translation {
 
   }
 
-  function translate($text) {
+  function translate($text, $language = null) {
     if ($this->enable) {
+
+      if (empty($language)) {
+        $language = $this->language;
+      }
       
-      $translation_path = "../translations/" . strtolower($this->language) . ".json";
+      $translation_path = "../translations/" . strtolower($language) . ".json";
       if (file_exists($translation_path) && $translation_file = file_get_contents($translation_path)) {
 
         $translation = json_decode($translation_file, true);

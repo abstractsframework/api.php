@@ -8,7 +8,7 @@ use \Abstracts\Helpers\Validation;
 use \Abstracts\Helpers\Translation;
 use \Abstracts\Helpers\Utilities;
 
-use \Abstracts\Lock;
+use \Abstracts\Hash;
 
 use Exception;
 
@@ -33,7 +33,7 @@ class API {
   private $translation = null;
 
   /* services */
-  private $lock = null;
+  private $hash = null;
 
   function __construct(
     $session = null,
@@ -55,7 +55,7 @@ class API {
     $this->translation = new Translation();
 
     /* initialize: services */
-    $this->lock = new Lock($this->session, 
+    $this->hash = new Hash($this->session, 
       Utilities::override_controls(true, true, true, true)
     );
 
@@ -135,7 +135,7 @@ class API {
     } else {
 
       $allows = array("127.0.0.1", "::1");
-      if (isset($config["allowed_remote_address"]) && !empty($this->config["allowed_remote_address"])) {
+      if (isset($this->config["allowed_remote_address"]) && !empty($this->config["allowed_remote_address"])) {
         $allows = explode(",", $this->config["allowed_remote_address"]);
       }
   
@@ -192,8 +192,72 @@ class API {
             }
           }
         }
+
+        $nonced = true;
+        if (isset($this->config["nonce_enable"]) && !empty($this->config["nonce_enable"])) {
+          $nonced = false;
+          $nonce = null;
+          if (isset($_POST["n"]) && !empty($_POST["n"])) {
+            $nonce = $_POST["n"];
+          } else if (isset($_REQUEST["n"]) && !empty($_REQUEST["n"])) {
+            $nonce = $_REQUEST["n"];
+          } else {
+            foreach (Utilities::get_all_headers() as $key => $value) {
+              if (strtolower($key) == "n") {
+                $nonce = $value;
+              }
+            }
+          }
+          if (isset($nonce) && $nonce != null) {
+            $filters = array(
+              "nonce" => $nonce,
+              "user_id" => (!empty($this->session) ? $this->session->id : 0)
+            );
+            $extensions = array(
+              array(
+                "conjunction" => "",
+                "key" => "content",
+                "operator" => "=",
+                "value" => "'" . $_SERVER["REMOTE_ADDR"] . "'"
+              )
+            );
+            foreach ($allows as $allow) {
+              array_push($extensions, 
+                array(
+                  "conjunction" => "OR",
+                  "key" => "content",
+                  "operator" => "=",
+                  "value" => "'" . $allow . "'"
+                )
+              );
+            }
+            if (!empty(
+              $hash_data = $this->database->select(
+                "hash", 
+                array("id"), 
+                $filters, 
+                $extensions, 
+                true,
+                false
+              )
+            )) {
+              $nonced = true;
+              $this->database->delete(
+                "hash", 
+                array("id" => $hash_data->id), 
+                null, 
+                true,
+                false
+              );
+            }
+          } else {
+            $nonced = true;
+          }
+        } else {
+          $nonced = true;
+        }
         
-        if (!empty($key) && $this->lock->unlock() && $this->security->verify_nonce($nonce)) {
+        if (!empty($key) && !empty($nonced)) {
           try {
             if (!empty(
               $api_data = $this->database->select(
@@ -248,7 +312,7 @@ class API {
       $data = $this->database->select(
         "api", 
         "*", 
-        array("id" => $id), 
+        $filters, 
         null, 
         $this->controls["view"]
       );
@@ -468,6 +532,59 @@ class API {
       }
     } else {
       return false;
+    }
+  }
+
+  function nonce() {
+    if (isset($this->config["nonce_enable"]) && !empty($this->config["nonce_enable"])) {
+
+      $ip = "";
+      if (isset($_SERVER['HTTP_CLIENT_IP'])) {
+        $ip = $_SERVER['HTTP_CLIENT_IP'];
+      } else if (isset($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+        $ip = $_SERVER['HTTP_X_FORWARDED_FOR'];
+      } else if (isset($_SERVER['HTTP_X_FORWARDED'])) {
+        $ip = $_SERVER['HTTP_X_FORWARDED'];
+      } else if (isset($_SERVER['HTTP_FORWARDED_FOR'])) {
+        $ip = $_SERVER['HTTP_FORWARDED_FOR'];
+      } else if (isset($_SERVER['HTTP_FORWARDED'])) {
+        $ip = $_SERVER['HTTP_FORWARDED'];
+      } else if (isset($_SERVER['REMOTE_ADDR'])) {
+        $ip = $_SERVER['REMOTE_ADDR'];
+      }
+
+      $seed = str_split(
+        "abcdefghijklmnopqrstuvwxyz"
+        . "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        . "0123456789"
+      );
+      shuffle($seed);
+      $hash = "";
+      foreach (array_rand($seed, 13) as $k) $hash .= $seed[$k];
+
+      $hash_parameters = array(
+        "hash" => $hash,
+        "content" => $ip,
+        "active" => true,
+        "user_id" => (!empty($this->session) ? $this->session->id : 0)
+      );
+      $data = $this->database->insert(
+        "hash", 
+        $hash_parameters, 
+        true
+      );
+      if (!empty($data)) {
+        return $this->callback(
+          __METHOD__, 
+          func_get_args(), 
+          $data
+        );
+      } else {
+        return $data;
+      }
+
+    } else {
+      throw new Exception($this->translation->translate("Nonce not enabled"), 405);
     }
   }
 

@@ -16,9 +16,12 @@ class Utilities {
       "a", // Authorization code (User token)
       "t", // API token
       "l", // Expected response language
-      "h", // Hash for Lock
+      "h", // Hash
+      "n", // Nonce for Hash
+      "c", // Code for Hash
       "v" // Version (Timestamp)
     );
+    // vanmltf
 
     $arrange = function($value) {
       $parameters = null;

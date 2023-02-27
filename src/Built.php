@@ -1514,13 +1514,13 @@ class Built {
             if (is_array($data->$key)) {
               $data->$reference_key = array_map(
                 function ($value, $referer, $reference) {
-                return $referer->format(
-                  $this->database->get_reference(
-                    $value,
-                    $referer->module->database_table,
-                    $reference->input_option_dynamic_value_key
-                  )
-                );
+                  return $referer->format(
+                    $this->database->get_reference(
+                      $value,
+                      $referer->module->database_table,
+                      $reference->input_option_dynamic_value_key
+                    )
+                  );
                 }, 
                 $data->$key, 
                 array_fill(0, count($data->$key), $referers[$key]), 
@@ -1711,7 +1711,7 @@ class Built {
           "input_option_dynamic_label_key" => "",
           "input_multiple_type" => "",
           "file_type" => "",
-          "file_lock" => "",
+          "file_hash" => "",
           "date_format" => "",
           "color_format" => "",
           "input_multiple_format" => "",

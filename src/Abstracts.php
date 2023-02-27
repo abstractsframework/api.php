@@ -149,7 +149,7 @@ class Abstracts {
       $data = $this->database->select(
         "abstracts", 
         "*", 
-        array("id" => $id), 
+        $filters, 
         null, 
         $this->controls["view"]
       );
@@ -625,7 +625,7 @@ class Abstracts {
         `input_option_dynamic_label_key`,
         `input_multiple_type`,
         `file_type`,
-        `file_lock`,
+        `file_hash`,
         `date_format`,
         `color_format`,
         `input_multiple_format`,
@@ -695,7 +695,7 @@ class Abstracts {
         '" . $row["input_option_dynamic_label_key"] . "',
         '" . $row["input_multiple_type"] . "',
         '" . $row["file_type"] . "',
-        '" . $row["file_lock"] . "',
+        '" . $row["file_hash"] . "',
         '" . $row["date_format"] . "',
         '" . $row["color_format"] . "',
         '" . $row["input_multiple_format"] . "',

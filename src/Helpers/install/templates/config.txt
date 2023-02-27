@@ -119,7 +119,7 @@ $config = array(
     "page_parameter_name" => "page",
 
     /* Environments */
-    "url_rewritting" => false,
+    "url_rewriting" => false,
     "compression" => false,
     "online" => true,
 
@@ -133,9 +133,9 @@ $config = array(
     /* Password */
     "password_salt" => "{{password_salt}}",
 
-    /* Lock */
-    "lock" => false,
-    "lock_expiration" => "24:00:00",
+    /* Nonce */
+    "nonce_enable" => false,
+    "nonce_expiration" => "24:00:00",
 
     /* User */
     "signup_email_verification" => false,

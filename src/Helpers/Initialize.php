@@ -68,13 +68,11 @@ class Initialize {
   
       $config["template_directory"] = "templates/" . $config["template"] . "/";
       $config["upload_directory"] = "media/";
-      $config["service_directory"] = "service/";
-      $config["service_core_directory"] = "service/core/" . $config["version"] . "/";
+      $config["service_directory"] = "services/";
   
-      $config["template_path"] = $config["website_url"].$config["template_directory"];
-      $config["upload_path"] = realpath($config["website_url"].$config["upload_directory"]);
-      $config["service_path"] = $config["website_url"].$config["service_directory"];
-      $config["service_core_path"] = $config["website_url"].$config["service_core_directory"];
+      $config["template_path"] = $config["website_url"] . $config["template_directory"];
+      $config["upload_path"] = realpath($config["website_url"] . $config["upload_directory"]);
+      $config["service_path"] = $config["website_url"] . $config["service_directory"];
   
       $config["encrypt_key_filemanger"] = "dd17e9c5f93007885229a2049be6a678";
 

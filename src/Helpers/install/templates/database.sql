@@ -90,7 +90,7 @@ CREATE TABLE `reference` (
   `image_large_height` int(11) DEFAULT 400,
   `upload_folder` varchar(200) DEFAULT NULL,
   `file_type` text DEFAULT NULL,
-  `file_lock` tinyint(1) DEFAULT NULL,
+  `file_hash` tinyint(1) DEFAULT NULL,
   `validate_number` text DEFAULT NULL,
   `validate_number_min` int(11) DEFAULT NULL,
   `validate_number_max` int(11) DEFAULT NULL,
@@ -360,7 +360,7 @@ CREATE TABLE `inad` (
 --
 
 CREATE TABLE `language` (
-  `id` int(10) UNSIGNED NOT NULL,
+  `id` int(10) NOT NULL,
   `name` varchar(100) NOT NULL,
   `short_name` varchar(5) NOT NULL,
   `order` int(11) DEFAULT 0,
@@ -379,18 +379,17 @@ INSERT INTO `language` (`id`, `name`, `short_name`, `order`, `create_at`, `activ
 -- --------------------------------------------------------
 
 --
--- Table structure for table `lock`
+-- Table structure for table `hash`
 --
 
-CREATE TABLE `lock` (
-  `id` int(50) NOT NULL,
+CREATE TABLE `hash` (
+  `id` int(10) NOT NULL,
   `hash` text NOT NULL,
   `content` text DEFAULT NULL,
-  `ip` varchar(320) DEFAULT NULL,
   `create_at` datetime DEFAULT NULL,
   `active` tinyint(1) DEFAULT 0,
   `user_id` int(11) DEFAULT 0
-) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COMMENT='table for Module Lock';
+) ENGINE=MyISAM DEFAULT CHARSET=utf8mb4 COMMENT='table for Module Hash';
 
 -- --------------------------------------------------------
 
@@ -504,7 +503,7 @@ INSERT INTO `module` (`id`, `name`, `link`, `description`, `icon`, `category`, `
 (10, 'Media', 'media', '', 'si si-picture', 'Files', '', '', 'media', 'media', 'media', '', '', '', 0, '', '', 66, NOW(), 0, NULL, 1),
 (11, 'Log', 'log', '', 'si si-clock', 'Maintenance', '', '', 'log', 'log', 'log', '', '', '', 0, '', '', 68, NOW(), 0, NULL, 1),
 (12, 'API', 'api', '', 'si si-share', 'System', '', '', 'api', 'api', 'api', '', '', '', 0, '', '', 70, NOW(), 0, NULL, 1),
-(13, 'Lock', 'lock', '', 'si si-docs', 'Maintenance', '', '', 'lock', 'lock', 'lock', '', '', '', 0, '', '', 67, NOW(), 0, NULL, 1),
+(13, 'Hash', 'hash', '', 'si si-docs', 'Maintenance', '', '', 'hash', 'hash', 'hash', '', '', '', 0, '', '', 67, NOW(), 0, NULL, 1),
 (14, 'Control', 'control', '', 'si si-shield', 'Users', '', '', 'control', 'control', 'control', '', '', '', 0, '', '', 61, NOW(), 0, NULL, 1),
 (16, 'Connect', 'connect', '', 'fa fa-circle-thin', 'Users', '', '', 'connect', 'connect', 'connect', '', '', '', 0, '', '', 62, NOW(), 0, NULL, 1),
 (15, 'Process', 'process', '', 'si si-bulb', 'System', '', '', 'process', 'process', 'process', '', '', '', 0, '', '', 71, NOW(), 0, NULL, 1),
@@ -766,9 +765,9 @@ ALTER TABLE `language`
   ADD KEY `user_id` (`user_id`);
 
 --
--- Indexes for table `lock`
+-- Indexes for table `hash`
 --
-ALTER TABLE `lock`
+ALTER TABLE `hash`
   ADD PRIMARY KEY (`id`),
   ADD KEY `create_at` (`create_at`),
   ADD KEY `active` (`active`),
@@ -947,13 +946,13 @@ ALTER TABLE `inad`
 -- AUTO_INCREMENT for table `language`
 --
 ALTER TABLE `language`
-  MODIFY `id` int(10) UNSIGNED NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=2;
 
 --
--- AUTO_INCREMENT for table `lock`
+-- AUTO_INCREMENT for table `hash`
 --
-ALTER TABLE `lock`
-  MODIFY `id` int(50) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
+ALTER TABLE `hash`
+  MODIFY `id` int(11) NOT NULL AUTO_INCREMENT, AUTO_INCREMENT=25;
 
 --
 -- AUTO_INCREMENT for table `log`

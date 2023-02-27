@@ -25,7 +25,7 @@ class Builder {
     "media",
     "log",
     "api",
-    "lock",
+    "hash",
     "control",
     "process",
     "connect",
