@@ -274,7 +274,7 @@ class Database {
       }
     }
     
-    $data = null;
+    $list = null;
     
     if (!empty($controls)) {
 
@@ -311,7 +311,7 @@ class Database {
               array_push($rows, (object) $row);
             }
           }
-          $data = $rows;
+          $list = $rows;
           mysqli_free_result($result);
         } else {
           $error = true;
@@ -331,7 +331,7 @@ class Database {
       throw new Exception($this->translation->translate("Permission denied"), 403);
     }
     
-    return $data;
+    return $list;
 
   }
 
@@ -390,7 +390,8 @@ class Database {
         $conditions = $this->condition(
           $this->escape_string($filters, $connection), 
           $this->escape_string($extensions, $connection), 
-          $this->escape_string($controls, $connection)
+          $this->escape_string($controls, $connection),
+          $table
         );
         
         $query = "SELECT NULL FROM `" . $table . "` " . $conditions . " " . $this->limit($start, $limit) . ";";
@@ -667,7 +668,8 @@ class Database {
             $conditions = $this->condition(
               $this->escape_string($filters, $connection), 
               $this->escape_string($extensions, $connection), 
-              $this->escape_string($controls, $connection)
+              $this->escape_string($controls, $connection),
+              $table
             );
 
             $sets = array();
@@ -775,7 +777,8 @@ class Database {
               $conditions = $this->condition(
                 $this->escape_string($filters, $connection), 
                 $this->escape_string($extensions, $connection), 
-                $this->escape_string($controls, $connection)
+                $this->escape_string($controls, $connection),
+                $table
               );
 
               $sets = array();
@@ -865,7 +868,7 @@ class Database {
 
     if (!empty($controls)) {
 
-      $data_current = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys);
+      $data_current_list = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys);
       if (!empty($data_current)) {
 
         $connection = $this->connect();
@@ -876,13 +879,14 @@ class Database {
           $conditions = $this->condition(
             $this->escape_string($filters, $connection), 
             $this->escape_string($extensions, $connection), 
-            $this->escape_string($controls, $connection)
+            $this->escape_string($controls, $connection),
+            $table
           );
 
           $query = "DELETE FROM `" . $table . "` " . $conditions . ";";
   
           if (mysqli_query($connection, $query)) {
-            $data = $data_current;
+            $data = $data_current_list;
           } else {
             $error = true;
           }
@@ -945,7 +949,7 @@ class Database {
 
     if (!empty($controls)) {
 
-      $data_current = array();
+      $data_current_list = array();
 
       $queries = array();
 
@@ -959,17 +963,18 @@ class Database {
           $conditions = $this->condition(
             $this->escape_string($filters, $connection), 
             $this->escape_string($extensions, $connection), 
-            $this->escape_string($controls, $connection)
+            $this->escape_string($controls, $connection),
+            $table
           );
 
-          array_push($data_current, $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys));
+          array_push($data_current_list, $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys));
 
           array_push($queries, "DELETE FROM `" . $table . "` " . $conditions);
 
         }
 
         if (mysqli_multi_query($connection, (implode(";", $queries) . ";"))) {
-          $data = $data_current;
+          $data = $data_current_list;
         } else {
           $error = true;
         }
@@ -1537,7 +1542,7 @@ class Database {
   function columns($table, $override_connection = null) {
     if (!empty($table)) {
 
-      $data = array();
+      $list = array();
   
       $connection = $override_connection;
       if (empty($override_connection)) {
@@ -1556,7 +1561,7 @@ class Database {
           while($row = $result->fetch_assoc()) {
             array_push($rows, $row);
           }
-          $data = $rows;
+          $list = $rows;
           mysqli_free_result($result);
         } else {
           $error = true;
@@ -1574,7 +1579,7 @@ class Database {
         throw new Exception($this->translation->translate("Unable to connect to database"), 500);
       }
 
-      return $data;
+      return $list;
       
     } else {
       throw new Exception($this->translation->translate("Not exist or gone"), 410);

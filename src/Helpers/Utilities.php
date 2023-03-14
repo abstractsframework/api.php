@@ -566,4 +566,26 @@ class Utilities {
     }
   }
 
+  public static function callback($function, $arguments, $result, $session, $controls, $identifier) {
+    $names = explode("::", $function);
+    $classes = explode("\\", $names[0]);
+    $namespace = "\\" . $classes[0] . "\\" . "Callback" . "\\" . $classes[1];
+    if (class_exists($namespace)) {
+      if (method_exists($namespace, $names[1])) {
+        $callback = new $namespace($session, $controls, $identifier);
+        try {
+          $function_name = $names[1];
+          return $callback->$function_name($arguments, $result);
+        } catch(Exception $e) {
+          throw new Exception($e->getMessage(), $e->getCode());
+        }
+        return $result;
+      } else {
+        return $result;
+      }
+    } else {
+      return $result;
+    }
+  }
+
 }

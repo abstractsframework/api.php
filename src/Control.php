@@ -130,7 +130,6 @@ class Control {
         $this->controls["view"]
       );
       if (!empty($data)) {
-        $referers = $this->refer($return_references);
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -140,7 +139,14 @@ class Control {
           "id",
           $data->id
         );
-        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data, $return_references),
+          $this->session,
+          $this->controls,
+          $this->id
+        );
       } else {
         return null;
       }
@@ -188,11 +194,6 @@ class Control {
         $this->controls["view"]
       );
       if (!empty($list)) {
-        $referers = $this->refer($return_references);
-        $data = array();
-        foreach ($list as $value) {
-          array_push($data, $this->format($value, $return_references, $referers));
-        }
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -202,7 +203,14 @@ class Control {
           null,
           null
         );
-        return $this->callback(__METHOD__, func_get_args(), $data);
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($list, $return_references),
+          $this->session,
+          $this->controls,
+          $this->id
+        );
       } else {
         return array();
       }
@@ -273,10 +281,13 @@ class Control {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
       } else {
         return $data;
@@ -315,10 +326,13 @@ class Control {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
       } else {
         return $data;
@@ -356,10 +370,13 @@ class Control {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
       } else {
         return $data;
@@ -389,10 +406,13 @@ class Control {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
       } else {
         return $data;
@@ -422,64 +442,97 @@ class Control {
     return $parameters;
   }
 
-  function refer($return_references = false, $abstracts_override = null) {
+  function format($data, $return_references = false) {
 
-    $data = array();
+    /* function: create referers before format (better performance for list) */
+    $refer = function ($return_references = false, $abstracts_override = null) {
+
+      $data = array();
     
-    if (!empty($return_references)) {
-      if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
-        $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-        $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
-      }
-    }
-
-    return $this->callback(__METHOD__, func_get_args(), $data);
-
-  }
-
-  function format($data, $return_references = false, $referers = null) {
-    if (!empty($data)) {
-
-      if ($data->active === "1") {
-        $data->active = true;
-      } else if ($data->active === "0" || empty($data->active)) {
-        $data->active = false;
-      }
-
-      if (!empty($data->behaviors)) {
-        $data->behaviors = explode(",", $data->behaviors);
-      }
-
-      if (is_array($referers) && !empty($referers)) {
+      if (!empty($return_references)) {
         if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
-          if (isset($referers["module_id"])) {
-            $data->module_id_reference = $this->format(
-              $this->database->get_reference(
-                $data->module_id, 
-                "module", 
-                "id"
-              ),
-              false
-            );
-          }
+          $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
         }
         if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-          if (isset($referers["user_id"])) {
-            $data->user_id_reference = $referers["user_id"]->format(
-              $this->database->get_reference(
-                $data->user_id,
-                "user",
-                "id"
-              )
-            );
-          }
+          $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
         }
       }
+  
+      return $data;
 
+    };
+
+    /* function: format single data */
+    $format = function ($data, $return_references = false, $referers = null) {
+      if (!empty($data)) {
+  
+        if ($data->active === "1") {
+          $data->active = true;
+        } else if ($data->active === "0" || empty($data->active)) {
+          $data->active = false;
+        }
+  
+        if (!empty($data->behaviors)) {
+          $data->behaviors = explode(",", $data->behaviors);
+        }
+  
+        if (is_array($referers) && !empty($referers)) {
+          if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+            if (isset($referers["module_id"])) {
+              $data->module_id_reference = $referers["module_id"]->format(
+                $this->database->get_reference(
+                  $data->module_id, 
+                  "module", 
+                  "id"
+                ),
+                false
+              );
+            }
+          }
+          if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+            if (isset($referers["user_id"])) {
+              $data->user_id_reference = $referers["user_id"]->format(
+                $this->database->get_reference(
+                  $data->user_id,
+                  "user",
+                  "id"
+                )
+              );
+            }
+          }
+        }
+  
+      }
+      return $data;
+    };
+
+    /* create referers */
+    $referers = $refer($return_references);
+    if (!is_array($data)) {
+      /* format single data */
+      $data = $format($data, $return_references, $referers);
+    } else {
+      /* format array data */
+      $data = array_map(
+        function($value, $return_references, $referers, $format) { 
+          return $format($value, $return_references, $referers); 
+        }, 
+        $data, 
+        array_fill(0, count($data), $return_references), 
+        array_fill(0, count($data), $referers), 
+        array_fill(0, count($data), $format)
+      );
     }
-    return $data;
+
+    return Utilities::callback(
+      __METHOD__, 
+      func_get_args(), 
+      $data,
+      $this->session,
+      $this->controls,
+      $this->id
+    );
+
   }
 
   function validate($parameters, $target_id = null, $patch = false) {
@@ -563,27 +616,6 @@ class Control {
       return $data;
     }
 
-  }
-
-  function callback($function, $arguments, $result) {
-    $names = explode("::", $function);
-    $classes = explode("\\", $names[0]);
-    $namespace = "\\" . $classes[0] . "\\" . "Callback" . "\\" . $classes[1];
-    if (class_exists($namespace)) {
-      if (method_exists($namespace, $names[1])) {
-        $callback = new $namespace($this->session, $this->controls, $this->id);
-        try {
-          $function_name = $names[1];
-          return $callback->$function_name($arguments, $result);
-        } catch(Exception $e) {
-          throw new Exception($e->getMessage(), $e->getCode());
-        }
-      } else {
-        return $result;
-      }
-    } else {
-      return $result;
-    }
   }
 
 }

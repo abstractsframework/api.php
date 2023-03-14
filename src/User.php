@@ -277,7 +277,14 @@ class User {
               );
               if ($token !== false) {
                 $data->token = $token;
-                return $this->callback($function, func_get_args(), $data);
+                return Utilities::callback(
+                  $function, 
+                  func_get_args(), 
+                  $data,
+                  $this->session,
+                  $this->controls,
+                  $this->id
+                );
               } else {
                 throw new Exception($this->translation->translate("Invalid authorization"), 401);
               }
@@ -287,11 +294,18 @@ class User {
             
           } else {
             $data->token = base64_encode($data->id . "." . $session_id);
-            return $this->callback($function, func_get_args(), $data);
+            return Utilities::callback(
+              $function, 
+              func_get_args(), 
+              $data,
+              $this->session,
+              $this->controls,
+              $this->id
+            );
           }
         };
 
-        $data = $this->format($data, false, null, true);
+        $data = $this->format($data, false, true);
 
         $session_id = session_id();
         $update_at = gmdate("Y-m-d H:i:s");
@@ -581,7 +595,7 @@ class User {
               throw new Exception($e->getMessage(), 400);
             }
             $data->session_id = $session_id;
-            $session = $this->format($data, false, null, true);
+            $session = $this->format($data, false, true);
           } else {
             if ($throw_error) {
               throw new Exception($message, 401);
@@ -752,67 +766,28 @@ class User {
 
       if (!empty($result->email)) {
 
-        $mail = new Mail($this->session, 
-          Utilities::override_controls(true, true, true, true)
-        );
+        try {
 
-        $mail_subject = 
-        $this->translation->translate("Welcome to") 
-        . " " 
-        . $this->config["site_name"];
-        $mail_body = 
-        $result->name . ","
-        . "\n\n"
-        . $this->translation->translate("You have signed up at") 
-        . " " 
-        . $this->config["site_name"];
-        if (!empty($template = $mail->template("welcome.php"))) {
-          foreach (get_object_vars($result) as $key => $value) {
-            if ($key != "password" && $key != "passcode") {
-              $template = str_replace("{{" . $key . "}}", $value, $template);
-            }
-          }
-          $mail_body = $template;
-        }
-        $mail->send(
-          $this->config["email"], 
-          $this->config["site_name"], 
-          $result->email, 
-          null,
-          null,
-          $mail_subject, 
-          $mail_body
-        );
-
-        $hash = new Hash($this->session, 
-          Utilities::override_controls(true, true, true, true)
-        );
-        $hash_parameters = array(
-          "content" => $result->email,
-          "active" => true
-        );
-        if (!empty($hash_data = $hash->create($hash_parameters))) {
-          $result->hash_email = $hash_data->hash;
+          $mail = new Mail($this->session, 
+            Utilities::override_controls(true, true, true, true)
+          );
+  
           $mail_subject = 
-          $this->translation->translate("Verify your email at") 
+          $this->translation->translate("Welcome to") 
           . " " 
           . $this->config["site_name"];
           $mail_body = 
           $result->name . ","
           . "\n\n"
-          . $this->translation->translate("Verification code is") 
+          . $this->translation->translate("You have signed up at") 
           . " " 
-          . $hash_data->hash
-          . "\n"
-          . "(" . ($this->config["url_rewriting"] ? "api/user/verify?c=" : "api/?m=user&f=verify&c=") . ")"
-          . $hash_data->hash;
-          if (!empty($template = $mail->template("verify.php"))) {
+          . $this->config["site_name"];
+          if (!empty($template = $mail->template("welcome.php"))) {
             foreach (get_object_vars($result) as $key => $value) {
               if ($key != "password" && $key != "passcode") {
                 $template = str_replace("{{" . $key . "}}", $value, $template);
               }
             }
-            $template = str_replace("{{hash}}", $hash_data->hash, $template);
             $mail_body = $template;
           }
           $mail->send(
@@ -824,7 +799,50 @@ class User {
             $mail_subject, 
             $mail_body
           );
-        }
+  
+          $hash = new Hash($this->session, 
+            Utilities::override_controls(true, true, true, true)
+          );
+          $hash_parameters = array(
+            "content" => $result->email,
+            "active" => true
+          );
+          if (!empty($hash_data = $hash->create($hash_parameters))) {
+            $result->hash_email = $hash_data->hash;
+            $mail_subject = 
+            $this->translation->translate("Verify your email at") 
+            . " " 
+            . $this->config["site_name"];
+            $mail_body = 
+            $result->name . ","
+            . "\n\n"
+            . $this->translation->translate("Verification code is") 
+            . " " 
+            . $hash_data->hash
+            . "\n"
+            . "(" . ($this->config["url_rewriting"] ? "api/user/verify?c=" : "api/?m=user&f=verify&c=") . ")"
+            . $hash_data->hash;
+            if (!empty($template = $mail->template("verify.php"))) {
+              foreach (get_object_vars($result) as $key => $value) {
+                if ($key != "password" && $key != "passcode") {
+                  $template = str_replace("{{" . $key . "}}", $value, $template);
+                }
+              }
+              $template = str_replace("{{hash}}", $hash_data->hash, $template);
+              $mail_body = $template;
+            }
+            $mail->send(
+              $this->config["email"], 
+              $this->config["site_name"], 
+              $result->email, 
+              null,
+              null,
+              $mail_subject, 
+              $mail_body
+            );
+          }
+          
+        } catch (Exception $e) {}
 
       }
 
@@ -850,7 +868,14 @@ class User {
         "id",
         $result->id
       );
-      return $this->callback(__METHOD__, func_get_args(), $this->format($result, false, null, true));
+      return Utilities::callback(
+        __METHOD__, 
+        func_get_args(), 
+        $this->format($result, false, true),
+        $this->session,
+        $this->controls,
+        $this->id
+      );
 
     } else {
       return false;
@@ -885,8 +910,14 @@ class User {
           "id",
           $data->id
         );
-        $referers = $this->refer($return_references);
-        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data, $return_references),
+          $this->session,
+          $this->controls,
+          $this->id
+        );
       } else {
         return null;
       }
@@ -1013,11 +1044,6 @@ class User {
 
       }
       if (!empty($list)) {
-        $data = array();
-        $referers = $this->refer($return_references);
-        foreach ($list as $value) {
-          array_push($data, $this->format($value, $return_references, $referers));
-        }
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -1027,7 +1053,14 @@ class User {
           null,
           null
         );
-        return $this->callback(__METHOD__, func_get_args(), $data);
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($list, $return_references),
+          $this->session,
+          $this->controls,
+          $this->id
+        );
       } else {
         return array();
       }
@@ -1236,67 +1269,28 @@ class User {
 
       if (!empty($result->email)) {
 
-        $mail = new Mail($this->session, 
-          Utilities::override_controls(true, true, true, true)
-        );
+        try {
 
-        $mail_subject = 
-        $this->translation->translate("Created account at") 
-        . " " 
-        . $this->config["site_name"];
-        $mail_body = 
-        $result->name . ","
-        . "\n\n"
-        . $this->translation->translate("You have created account at") 
-        . " " 
-        . $this->config["site_name"];
-        if (!empty($template = $mail->template("user-created.php"))) {
-          foreach (get_object_vars($result) as $key => $value) {
-            if ($key != "password" && $key != "passcode") {
-              $template = str_replace("{{" . $key . "}}", $value, $template);
-            }
-          }
-          $mail_body = $template;
-        }
-        $mail->send(
-          $this->config["email"], 
-          $this->config["site_name"], 
-          $result->email, 
-          null,
-          null,
-          $mail_subject, 
-          $mail_body
-        );
+          $mail = new Mail($this->session, 
+            Utilities::override_controls(true, true, true, true)
+          );
 
-        $hash = new Hash($this->session, 
-          Utilities::override_controls(true, true, true, true)
-        );
-        $hash_parameters = array(
-          "content" => $result->email,
-          "active" => true
-        );
-        if (!empty($hash_data = $hash->create($hash_parameters))) {
-          $result->hash_email = $hash_data->hash;
           $mail_subject = 
-          $this->translation->translate("Verify your email at") 
+          $this->translation->translate("Created account at") 
           . " " 
           . $this->config["site_name"];
           $mail_body = 
           $result->name . ","
           . "\n\n"
-          . $this->translation->translate("Verification code is") 
+          . $this->translation->translate("You have created account at") 
           . " " 
-          . $hash_data->hash
-          . "\n"
-          . "(" . ($this->config["url_rewriting"] ? "api/user/verify?c=" : "api/?m=user&f=verify&c=") . ")"
-          . $hash_data->hash;
-          if (!empty($template = $mail->template("verify.php"))) {
+          . $this->config["site_name"];
+          if (!empty($template = $mail->template("user-created.php"))) {
             foreach (get_object_vars($result) as $key => $value) {
               if ($key != "password" && $key != "passcode") {
                 $template = str_replace("{{" . $key . "}}", $value, $template);
               }
             }
-            $template = str_replace("{{hash}}", $hash_data->hash, $template);
             $mail_body = $template;
           }
           $mail->send(
@@ -1308,7 +1302,50 @@ class User {
             $mail_subject, 
             $mail_body
           );
-        }
+
+          $hash = new Hash($this->session, 
+            Utilities::override_controls(true, true, true, true)
+          );
+          $hash_parameters = array(
+            "content" => $result->email,
+            "active" => true
+          );
+          if (!empty($hash_data = $hash->create($hash_parameters))) {
+            $result->hash_email = $hash_data->hash;
+            $mail_subject = 
+            $this->translation->translate("Verify your email at") 
+            . " " 
+            . $this->config["site_name"];
+            $mail_body = 
+            $result->name . ","
+            . "\n\n"
+            . $this->translation->translate("Verification code is") 
+            . " " 
+            . $hash_data->hash
+            . "\n"
+            . "(" . ($this->config["url_rewriting"] ? "api/user/verify?c=" : "api/?m=user&f=verify&c=") . ")"
+            . $hash_data->hash;
+            if (!empty($template = $mail->template("verify.php"))) {
+              foreach (get_object_vars($result) as $key => $value) {
+                if ($key != "password" && $key != "passcode") {
+                  $template = str_replace("{{" . $key . "}}", $value, $template);
+                }
+              }
+              $template = str_replace("{{hash}}", $hash_data->hash, $template);
+              $mail_body = $template;
+            }
+            $mail->send(
+              $this->config["email"], 
+              $this->config["site_name"], 
+              $result->email, 
+              null,
+              null,
+              $mail_subject, 
+              $mail_body
+            );
+          }
+
+        } catch (Exception $e) {}
 
       }
 
@@ -1334,10 +1371,13 @@ class User {
         "id",
         $result->id
       );
-      return $this->callback(
+      return Utilities::callback(
         __METHOD__, 
         func_get_args(), 
-        $this->format($result)
+        $this->format($result),
+        $this->session,
+        $this->controls,
+        $this->id
       );
 
     } else {
@@ -1533,10 +1573,13 @@ class User {
         "id",
         $result->id
       );
-      return $this->callback(
+      return Utilities::callback(
         __METHOD__, 
         func_get_args(), 
-        $this->format($result)
+        $this->format($result),
+        $this->session,
+        $this->controls,
+        $this->id
       );
 
     } else {
@@ -1734,10 +1777,13 @@ class User {
         "id",
         $result->id
       );
-      return $this->callback(
+      return Utilities::callback(
         __METHOD__, 
         func_get_args(), 
-        $this->format($result)
+        $this->format($result),
+        $this->session,
+        $this->controls,
+        $this->id
       );
 
     } else {
@@ -1760,8 +1806,12 @@ class User {
 
         $file_old = Utilities::backtrace() . trim($data->image, "/");
         if (!empty($data->image) && file_exists($file_old)) {
-          chmod($file_old, 0777);
-          unlink($file_old);
+          try {
+            chmod($file_old, 0777);
+          } catch (Exception $e) {}
+          try {
+            unlink($file_old);
+          } catch (Exception $e) {}
         }
 
         try {
@@ -1809,10 +1859,13 @@ class User {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
 
       } else {
@@ -1988,8 +2041,12 @@ class User {
 
               } else {
                 if (file_exists($destination) && !is_dir($destination)) {
-                  chmod($destination, 0777);
-                  unlink($destination);
+                  try {
+                    chmod($destination, 0777);
+                  } catch (Exception $e) {}
+                  try {
+                    unlink($destination);
+                  } catch (Exception $e) {}
                 }
                 return false;
               }
@@ -2043,7 +2100,14 @@ class User {
         
         if (empty($errors)) {
           if (!empty($successes)) {
-            return $this->callback(__METHOD__, func_get_args(), $successes);
+            return Utilities::callback(
+              __METHOD__, 
+              func_get_args(), 
+              $successes,
+              $this->session,
+              $this->controls,
+              $this->id
+            );
           } else {
             throw new Exception($this->translation->translate("No file has been uploaded"), 409);
           }
@@ -2082,18 +2146,30 @@ class User {
             try {
               $file_old = Utilities::backtrace() . trim($file, "/");
               if (!empty($file) && file_exists($file_old)) {
-                chmod($file_old, 0777);
-                unlink($file_old);
+                try {
+                  chmod($file_old, 0777);
+                } catch (Exception $e) {}
+                try {
+                  unlink($file_old);
+                } catch (Exception $e) {}
               }
               $thumbnail_old = Utilities::get_thumbnail($file_old);
               if (file_exists($thumbnail_old) && !is_dir($thumbnail_old)) {
-                chmod($thumbnail_old, 0777);
-                unlink($thumbnail_old);
+                try {
+                  chmod($thumbnail_old, 0777);
+                } catch (Exception $e) {}
+                try {
+                  unlink($thumbnail_old);
+                } catch (Exception $e) {}
               }
               $large_old = Utilities::get_large($file_old);
               if (file_exists($large_old) && !is_dir($large_old)) {
-                chmod($large_old, 0777);
-                unlink($large_old);
+                try {
+                  chmod($large_old, 0777);
+                } catch (Exception $e) {}
+                try {
+                  unlink($large_old);
+                } catch (Exception $e) {}
               }
               return true;
             } catch(Exception $e) {
@@ -2144,7 +2220,14 @@ class User {
           }
 
           if (empty($errors)) {
-            return $this->callback(__METHOD__, func_get_args(), $successes);
+            return Utilities::callback(
+              __METHOD__, 
+              func_get_args(), 
+              $successes,
+              $this->session,
+              $this->controls,
+              $this->id
+            );
           } else {
             throw new Exception($this->translation->translate("Unable to delete") . " '" . implode("', '", $errors) . "'", 409);
           }
@@ -2282,10 +2365,13 @@ class User {
               "id",
               $data->id
             );
-            return $this->callback(
+            return Utilities::callback(
               __METHOD__, 
               func_get_args(), 
-              $this->format($data)
+              $this->format($data),
+              $this->session,
+              $this->controls,
+              $this->id
             );
     
           } else {
@@ -2439,10 +2525,13 @@ class User {
               "id",
               $data->id
             );
-            return $this->callback(
+            return Utilities::callback(
               __METHOD__, 
               func_get_args(), 
-              $this->format($data)
+              $this->format($data),
+              $this->session,
+              $this->controls,
+              $this->id
             );
 
           }
@@ -2513,10 +2602,13 @@ class User {
       }
     }
     if ($result) {
-      return $this->callback(
+      return Utilities::callback(
         __METHOD__, 
         func_get_args(), 
-        $result
+        $result,
+        $this->session,
+        $this->controls,
+        $this->id
       );
     } else {
       throw new Exception($this->translation->translate("Unknown error"), 409);
@@ -2617,8 +2709,14 @@ class User {
       }
       if (isset($parameters["image"])) {
         unset($parameters["image"]);
-        if (!empty($update)) {
-          $parameters["image"] = "";
+        if (empty($update)) {
+          if (!empty($_FILES) && isset($_FILES["image"]) && !empty($_FILES["image"])) {
+            $parameters["image"] = "";
+          }
+        } else {
+          if (!empty($_FILES) && isset($_FILES["image"]) && !empty($_FILES["image"])) {
+            unset($parameters["image"]);
+          }
         }
       }
       if (isset($parameters["email_verified"])) {
@@ -2646,29 +2744,150 @@ class User {
         }
       }
     }
-    return $this->callback(__METHOD__, func_get_args(), $parameters);
+    return Utilities::callback(
+      __METHOD__, 
+      func_get_args(), 
+      $parameters,
+      $this->session,
+      $this->controls,
+      $this->id
+    );
   }
 
-  function refer($return_references = false, $abstracts_override = null) {
+  function format($data, $return_references = false, $return_authoritiy = false) {
 
-    $data = array();
+    /* function: create referers before format (better performance for list) */
+    $refer = function ($return_references = false, $abstracts_override = null) {
 
-    return $this->callback(__METHOD__, func_get_args(), $data);
+      $data = array();
+  
+      return $data;
 
-  }
+    };
 
-  function format($data, $return_references = false, $referers = null, $return_authoritiy = false, $recursive = false) {
-
-    if (!empty($data)) {
-
-      if ($data->active === "1") {
-        $data->active = true;
-      } else if ($data->active === "0" || empty($data->active)) {
-        $data->active = false;
-      }
-
-      if ($return_references === true || (is_array($return_references) && in_array("members", $return_references))) {
-        if (!empty(
+    /* function: format single data */
+    $format = function ($data, $return_references = false, $return_authoritiy = false) {
+      if (!empty($data)) {
+  
+        if ($data->active === "1") {
+          $data->active = true;
+        } else if ($data->active === "0" || empty($data->active)) {
+          $data->active = false;
+        }
+  
+        $data->password_set = false;
+        if (!empty($data->password)) {
+          $data->password_set = true;
+        }
+        unset($data->password);
+  
+        $data->passcode_set = false;
+        if (!empty($data->passcode)) {
+          $data->passcode_set = true;
+        }
+        unset($data->passcode);
+  
+        $data->email_verified = false;
+        if (!empty($data->email_verified)) {
+          $data->email_verified = true;
+        }
+  
+        $data->phone_verified = false;
+        if (!empty($data->phone_verified)) {
+          $data->phone_verified = true;
+        }
+  
+        $data->ndid_verified = false;
+        if (!empty($data->ndid_verified)) {
+          $data->ndid_verified = true;
+        }
+  
+        $data->face_verified = false;
+        if (!empty($data->face_verified)) {
+          $data->face_verified = true;
+        }
+        
+        $data->image_reference = null;
+        if (isset($data->image) && !empty($data->image)) {
+          $data->image_reference = (object) array(
+            "id" => $data->image,
+            "name" => basename($data->image),
+            "original" => $data->image,
+            "thumbnail" => null,
+            "large" => null
+          );
+          $data->image_reference->original = $data->image;
+          if (strpos($data->image, "http://") !== 0 || strpos($data->image, "https://") !== 0) {
+            $data->image_reference->original = $this->config["base_url"] . $data->image;
+          }
+          $data->image_reference->thumbnail = Utilities::get_thumbnail($data->image_reference->original);
+          $data->image_reference->large = Utilities::get_large($data->image_reference->original);
+        }
+  
+        if ($return_references === true || (is_array($return_references) && in_array("members", $return_references))) {
+          if (!empty(
+            $member_list = $this->database->select_multiple(
+              "member", 
+              "*", 
+              array("user" => $data->id), 
+              null, 
+              null, 
+              null, 
+              "id", 
+              "asc", 
+              true,
+              false
+            )
+          )) {
+            $data->members = $member_list;
+          }
+        }
+  
+        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+          $data->user_id_reference = $this->format(
+            $this->database->get_reference(
+              $data->user_id, 
+              "user", 
+              "id"
+            )
+          );
+        }
+    
+        if ($return_authoritiy) {
+          $arrange_controls = function($controls = array()) {
+            $control_behaviors = array("view", "create", "update", "delete");
+            $data = array();
+            if (!empty($controls) && is_array($controls)) {
+              foreach ($controls as $controls_value) {
+                $value = (array) $controls_value;
+                $control_arranged = $this->control->arrange((object) $value);
+                if (!array_key_exists($value["module_id"], $data)) {
+                  $data[$value["module_id"]] = $control_arranged;
+                } else {
+                  foreach ($control_behaviors as $control_behavior) {
+                    if (!array_key_exists($control_behavior, $data[$value["module_id"]])) {
+                      $data[$value["module_id"]][$control_behavior] = $control_arranged[$control_behavior];
+                    } else {
+                      if ($control_arranged[$control_behavior] === true) {
+                        $data[$value["module_id"]][$control_behavior] = $control_arranged[$control_behavior];
+                      } else if ($data[$value["module_id"]][$control_behavior] !== true) {
+                        $controls_existed = $data[$value["module_id"]][$control_behavior];
+                        if (!is_array($data[$value["module_id"]][$control_behavior])) {
+                          $controls_existed = array($data[$value["module_id"]][$control_behavior]);
+                        }
+                        $controls_current = $control_arranged[$control_behavior];
+                        if (!is_array($control_arranged[$control_behavior])) {
+                          $controls_current = array($control_arranged[$control_behavior]);
+                        }
+                        $data[$value["module_id"]][$control_behavior] = array_merge($controls_existed, $controls_current);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+            return $data;
+          };
           $member_list = $this->database->select_multiple(
             "member", 
             "*", 
@@ -2680,160 +2899,92 @@ class User {
             "asc", 
             true,
             false
-          )
-        )) {
-          $data->members = $member_list;
-        }
-      }
-  
-      if ($return_authoritiy) {
-        $arrange_controls = function($controls = array()) {
-          $control_behaviors = array("view", "create", "update", "delete");
-          $data = array();
-          if (!empty($controls) && is_array($controls)) {
-            foreach ($controls as $controls_value) {
-              $value = (array) $controls_value;
-              $control_arranged = $this->control->arrange((object) $value);
-              if (!array_key_exists($value["module_id"], $data)) {
-                $data[$value["module_id"]] = $control_arranged;
-              } else {
-                foreach ($control_behaviors as $control_behavior) {
-                  if (!array_key_exists($control_behavior, $data[$value["module_id"]])) {
-                    $data[$value["module_id"]][$control_behavior] = $control_arranged[$control_behavior];
-                  } else {
-                    if ($control_arranged[$control_behavior] === true) {
-                      $data[$value["module_id"]][$control_behavior] = $control_arranged[$control_behavior];
-                    } else if ($data[$value["module_id"]][$control_behavior] !== true) {
-                      $controls_existed = $data[$value["module_id"]][$control_behavior];
-                      if (!is_array($data[$value["module_id"]][$control_behavior])) {
-                        $controls_existed = array($data[$value["module_id"]][$control_behavior]);
-                      }
-                      $controls_current = $control_arranged[$control_behavior];
-                      if (!is_array($control_arranged[$control_behavior])) {
-                        $controls_current = array($control_arranged[$control_behavior]);
-                      }
-                      $data[$value["module_id"]][$control_behavior] = array_merge($controls_existed, $controls_current);
-                    }
-                  }
+          );
+          if (!empty($member_list)) {
+            for ($i = 0; $i < count($member_list); $i++) {
+              if ($member_list[$i]->active === "1") {
+                $member_list[$i]->active = true;
+              } else if ($member_list[$i]->active === "0" || empty($member_list[$i]->active)) {
+                $member_list[$i]->active = false;
+              }
+              $group_data = $this->database->select(
+                "group", 
+                "*", 
+                array("id" => $member_list[$i]->group_id), 
+                null, 
+                true,
+                false
+              );
+              if (!empty($group_data)) {
+                if (isset($group_data->controls) && !empty($group_data->controls)) {
+                  $group_data->controls = $arrange_controls(unserialize($group_data->controls));
+                  $member_list[$i]->group_id_data = $group_data;
                 }
               }
             }
           }
-          return $data;
-        };
-        $member_list = $this->database->select_multiple(
-          "member", 
-          "*", 
-          array("user" => $data->id), 
-          null, 
-          null, 
-          null, 
-          "id", 
-          "asc", 
-          true,
-          false
-        );
-        if (!empty($member_list)) {
-          for ($i = 0; $i < count($member_list); $i++) {
-            if ($member_list[$i]->active === "1") {
-              $member_list[$i]->active = true;
-            } else if ($member_list[$i]->active === "0" || empty($member_list[$i]->active)) {
-              $member_list[$i]->active = false;
-            }
-            $group_data = $this->database->select(
-              "group", 
-              "*", 
-              array("id" => $member_list[$i]->group_id), 
-              null, 
-              true,
-              false
-            );
-            if (!empty($group_data)) {
-              if (isset($group_data->controls) && !empty($group_data->controls)) {
-                $group_data->controls = $arrange_controls(unserialize($group_data->controls));
-                $member_list[$i]->group_id_data = $group_data;
+          $data->members = $member_list;
+      
+          $controls = array();
+          $control_list = $this->database->select_multiple(
+            "control", 
+            "*", 
+            array("user" => $data->id), 
+            null, 
+            null, 
+            null, 
+            array("module_id"), 
+            "asc", 
+            true,
+            false
+          );
+          if (!empty($control_list)) {
+            $controls = $arrange_controls($control_list);
+          }
+          if ($data->members) {
+            for ($i = 0; $i < count($member_list); $i++) {
+              if ($member_list[$i]->group_id_data && $member_list[$i]->group_id_data->controls) {
+                $data->controls = array_merge($controls, $member_list[$i]->group_id_data->controls);
+                unset($member_list[$i]->group_id_data->controls);
               }
             }
+          } else {
+            $data->controls = $controls;
           }
-        }
-        $data->members = $member_list;
-    
-        $controls = array();
-        $control_list = $this->database->select_multiple(
-          "control", 
-          "*", 
-          array("user" => $data->id), 
-          null, 
-          null, 
-          null, 
-          array("module_id"), 
-          "asc", 
-          true,
-          false
-        );
-        if (!empty($control_list)) {
-          $controls = $arrange_controls($control_list);
-        }
-        if ($data->members) {
-          for ($i = 0; $i < count($member_list); $i++) {
-            if ($member_list[$i]->group_id_data && $member_list[$i]->group_id_data->controls) {
-              $data->controls = array_merge($controls, $member_list[$i]->group_id_data->controls);
-              unset($member_list[$i]->group_id_data->controls);
-            }
-          }
-        } else {
           $data->controls = $controls;
         }
-        $data->controls = $controls;
+  
       }
+      return $data;
+    };
 
-      $data->password_set = false;
-      if (!empty($data->password)) {
-        $data->password_set = true;
-      }
-      unset($data->password);
-
-      $data->passcode_set = false;
-      if (!empty($data->passcode)) {
-        $data->passcode_set = true;
-      }
-      unset($data->passcode);
-      
-      if (isset($data->image) && !empty($data->image)) {
-        $data->image_reference = (object) array(
-          "id" => $data->image,
-          "name" => basename($data->image),
-          "original" => $data->image,
-          "thumbnail" => null,
-          "large" => null
-        );
-        $data->image_reference->original = $data->image;
-        if (strpos($data->image, "http://") !== 0 || strpos($data->image, "https://") !== 0) {
-          $data->image_reference->original = $this->config["base_url"] . $data->image;
-        }
-        $data->image_reference->thumbnail = Utilities::get_thumbnail($data->image_reference->original);
-        $data->image_reference->large = Utilities::get_large($data->image_reference->original);
-      }
-
-      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-        if (!$recursive) {
-          $data->user_id_reference = $this->format(
-            $this->database->get_reference(
-              $data->user_id, 
-              "user", 
-              "id"
-            ),
-            true,
-            $referers,
-            false,
-            true
-          );
-        }
-      }
-
+    /* create referers */
+    $referers = $refer($return_references);
+    if (!is_array($data)) {
+      /* format single data */
+      $data = $format($data, $return_references, $return_authoritiy, $referers);
+    } else {
+      /* format array data */
+      $data = array_map(
+        function($value, $return_references, $return_authoritiy, $referers, $format) { 
+          return $format($value, $return_references, $return_authoritiy, $referers); 
+        }, 
+        $data, 
+        array_fill(0, count($data), $return_references), 
+        array_fill(0, count($data), $return_authoritiy), 
+        array_fill(0, count($data), $referers), 
+        array_fill(0, count($data), $format)
+      );
     }
 
-		return $this->callback(__METHOD__, func_get_args(), $data);
+		return Utilities::callback(
+      __METHOD__, 
+      func_get_args(), 
+      $data,
+      $this->session,
+      $this->controls,
+      $this->id
+    );
 
   }
 
@@ -2876,7 +3027,14 @@ class User {
     } else {
       throw new Exception($this->translation->translate("Bad request"), 400);
     }
-    return $this->callback(__METHOD__, func_get_args(), $result);
+    return Utilities::callback(
+      __METHOD__, 
+      func_get_args(), 
+      $result,
+      $this->session,
+      $this->controls,
+      $this->id
+    );
   }
 
   private function update_device($user_id, $session_id) {
@@ -2911,7 +3069,14 @@ class User {
           false
         )
       ) {
-        return $this->callback(__METHOD__, func_get_args(), true);
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          true,
+          $this->session,
+          $this->controls,
+          $this->id
+        );
       } else {
         return false;
       }
@@ -2929,27 +3094,6 @@ class User {
       return $random;
     } else {
       return $this->random_username();
-    }
-  }
-
-  function callback($function, $arguments, $result) {
-    $names = explode("::", $function);
-    $classes = explode("\\", $names[0]);
-    $namespace = "\\" . $classes[0] . "\\" . "Callback" . "\\" . $classes[1];
-    if (class_exists($namespace)) {
-      if (method_exists($namespace, $names[1])) {
-        $callback = new $namespace($this->session, $this->controls, $this->id);
-        try {
-          $function_name = $names[1];
-          return $callback->$function_name($arguments, $result);
-        } catch(Exception $e) {
-          throw new Exception($e->getMessage(), $e->getCode());
-        }
-      } else {
-        return $result;
-      }
-    } else {
-      return $result;
     }
   }
 

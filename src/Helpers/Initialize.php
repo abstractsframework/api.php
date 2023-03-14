@@ -193,6 +193,13 @@ class Initialize {
     ) : false;
   }
 
+  public static function translation($translation) {
+    return isset($translation) ? (
+      ($translation === "true" || $translation === "1" || $translation === 1) ? true 
+      : ($translation === "false" || $translation === "0" || $translation === 0 ? false : $translation)
+    ) : null;
+  }
+
   public static function filters($filters) {
     $filters = is_array($filters) ? $filters : array();
     if (!empty($filters)) {

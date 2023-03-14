@@ -356,10 +356,8 @@ class Builder {
           || (empty($abstracts->component_page) && ($reference == "page_id" || $reference == "title"))
           || (empty($abstracts->component_media) && $reference == "media_id")
         ) {
-          if (!in_array($reference, $reference_save)) {
-            array_push($query_drops, "DROP `" . $reference . "`");
-            array_push($query_drops, "DROP INDEX(`" . $reference . "`)");
-          }
+          array_push($query_drops, "DROP `" . $reference . "`");
+          array_push($query_drops, "DROP INDEX `" . $reference . "`");
         }
       }
 

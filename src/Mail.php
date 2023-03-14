@@ -318,7 +318,6 @@ class Mail {
         $this->controls["view"]
       );
       if (!empty($data)) {
-        $referers = $this->refer($return_references);
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -328,7 +327,14 @@ class Mail {
           "id",
           $data->id
         );
-        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data, $return_references),
+          $this->session,
+          $this->controls,
+          $this->id
+        );
       } else {
         return null;
       }
@@ -377,11 +383,6 @@ class Mail {
         $this->controls["view"]
       );
       if (!empty($list)) {
-        $referers = $this->refer($return_references);
-        $data = array();
-        foreach ($list as $value) {
-          array_push($data, $this->format($value, $return_references, $referers));
-        }
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -391,7 +392,14 @@ class Mail {
           null,
           null
         );
-        return $this->callback(__METHOD__, func_get_args(), $data);
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($list, $return_references),
+          $this->session,
+          $this->controls,
+          $this->id
+        );
       } else {
         return array();
       }
@@ -462,10 +470,13 @@ class Mail {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
       } else {
         return $data;
@@ -504,10 +515,13 @@ class Mail {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
       } else {
         return $data;
@@ -545,10 +559,13 @@ class Mail {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
       } else {
         return $data;
@@ -578,10 +595,13 @@ class Mail {
           "id",
           $data->id
         );
-        return $this->callback(
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->id
         );
       } else {
         return $data;
@@ -756,8 +776,12 @@ class Mail {
     
                 } else {
                   if (file_exists($destination) && !is_dir($destination)) {
-                    chmod($destination, 0777);
-                    unlink($destination);
+                    try {
+                      chmod($destination, 0777);
+                    } catch (Exception $e) {}
+                    try {
+                      unlink($destination);
+                    } catch (Exception $e) {}
                   }
                   return false;
                 }
@@ -811,7 +835,14 @@ class Mail {
           
           if (empty($errors)) {
             if (!empty($successes)) {
-              return $this->callback(__METHOD__, func_get_args(), $successes);
+              return Utilities::callback(
+                __METHOD__, 
+                func_get_args(), 
+                $successes,
+                $this->session,
+                $this->controls,
+                $this->id
+              );
             } else {
               throw new Exception($this->translation->translate("No file has been uploaded"), 409);
             }
@@ -850,18 +881,30 @@ class Mail {
             try {
               $file_old = Utilities::backtrace() . trim($file, "/");
               if (!empty($file) && file_exists($file_old)) {
-                chmod($file_old, 0777);
-                unlink($file_old);
+                try {
+                  chmod($file_old, 0777);
+                } catch (Exception $e) {}
+                try {
+                  unlink($file_old);
+                } catch (Exception $e) {}
               }
               $thumbnail_old = Utilities::get_thumbnail($file_old);
               if (file_exists($thumbnail_old) && !is_dir($thumbnail_old)) {
-                chmod($thumbnail_old, 0777);
-                unlink($thumbnail_old);
+                try {
+                  chmod($thumbnail_old, 0777);
+                } catch (Exception $e) {}
+                try {
+                  unlink($thumbnail_old);
+                } catch (Exception $e) {}
               }
               $large_old = Utilities::get_large($file_old);
               if (file_exists($large_old) && !is_dir($large_old)) {
-                chmod($large_old, 0777);
-                unlink($large_old);
+                try {
+                  chmod($large_old, 0777);
+                } catch (Exception $e) {}
+                try {
+                  unlink($large_old);
+                } catch (Exception $e) {}
               }
               return true;
             } catch(Exception $e) {
@@ -912,7 +955,14 @@ class Mail {
           }
 
           if (empty($errors)) {
-            return $this->callback(__METHOD__, func_get_args(), $successes);
+            return Utilities::callback(
+              __METHOD__, 
+              func_get_args(), 
+              $successes,
+              $this->session,
+              $this->controls,
+              $this->id
+            );
           } else {
             throw new Exception($this->translation->translate("Unable to delete") . " '" . implode("', '", $errors) . "'", 409);
           }
@@ -948,45 +998,78 @@ class Mail {
     return $parameters;
   }
 
-  function refer($return_references = false, $abstracts_override = null) {
+  function format($data, $return_references = false) {
 
-    $data = array();
+    /* function: create referers before format (better performance for list) */
+    $refer = function ($return_references = false, $abstracts_override = null) {
+
+      $data = array();
     
-    if (!empty($return_references)) {
-      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-        $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
-      }
-    }
-
-    return $this->callback(__METHOD__, func_get_args(), $data);
-
-  }
-
-  function format($data, $return_references = false, $referers = null) {
-    if (!empty($data)) {
-
-      if ($data->active === "1") {
-        $data->active = true;
-      } else if ($data->active === "0" || empty($data->active)) {
-        $data->active = false;
-      }
-
-      if (is_array($referers) && !empty($referers)) {
+      if (!empty($return_references)) {
         if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-          if (isset($referers["user_id"])) {
-            $data->user_id_reference = $referers["user_id"]->format(
-              $this->database->get_reference(
-                $data->user_id,
-                "user",
-                "id"
-              )
-            );
-          }
+          $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
         }
       }
+  
+      return $data;
 
+    };
+
+    /* function: format single data */
+    $format = function ($data, $return_references = false, $referers = null) {
+      if (!empty($data)) {
+  
+        if ($data->active === "1") {
+          $data->active = true;
+        } else if ($data->active === "0" || empty($data->active)) {
+          $data->active = false;
+        }
+  
+        if (is_array($referers) && !empty($referers)) {
+          if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+            if (isset($referers["user_id"])) {
+              $data->user_id_reference = $referers["user_id"]->format(
+                $this->database->get_reference(
+                  $data->user_id,
+                  "user",
+                  "id"
+                )
+              );
+            }
+          }
+        }
+  
+      }
+      return $data;
+    };
+
+    /* create referers */
+    $referers = $refer($return_references);
+    if (!is_array($data)) {
+      /* format single data */
+      $data = $format($data, $return_references, $referers);
+    } else {
+      /* format array data */
+      $data = array_map(
+        function($value, $return_references, $referers, $format) { 
+          return $format($value, $return_references, $referers); 
+        }, 
+        $data, 
+        array_fill(0, count($data), $return_references), 
+        array_fill(0, count($data), $referers), 
+        array_fill(0, count($data), $format)
+      );
     }
-		return $data;
+		
+    return Utilities::callback(
+      __METHOD__, 
+      func_get_args(), 
+      $data,
+      $this->session,
+      $this->controls,
+      $this->id
+    );
+
   }
 
   function validate($parameters, $target_id = null, $patch = false) {
@@ -994,27 +1077,6 @@ class Mail {
       return true;
     } else {
       throw new Exception($this->translation->translate("Bad request"), 400);
-    }
-  }
-
-  function callback($function, $arguments, $result) {
-    $names = explode("::", $function);
-    $classes = explode("\\", $names[0]);
-    $namespace = "\\" . $classes[0] . "\\" . "Callback" . "\\" . $classes[1];
-    if (class_exists($namespace)) {
-      if (method_exists($namespace, $names[1])) {
-        $callback = new $namespace($this->session, $this->controls, $this->id);
-        try {
-          $function_name = $names[1];
-          return $callback->$function_name($arguments, $result);
-        } catch(Exception $e) {
-          throw new Exception($e->getMessage(), $e->getCode());
-        }
-      } else {
-        return $result;
-      }
-    } else {
-      return $result;
     }
   }
 

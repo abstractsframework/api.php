@@ -14,6 +14,7 @@ use \Abstracts\User;
 use \Abstracts\Group;
 use \Abstracts\Page;
 use \Abstracts\Log;
+use \Abstracts\Language;
 
 use Exception;
 use DateTime;
@@ -123,7 +124,8 @@ class Built {
           $result = $this->$function(
             (isset($parameters["id"]) ? $parameters["id"] : null),
             (isset($parameters["active"]) ? $parameters["active"] : null),
-            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false),
+            (isset($parameters["translation"]) ? $parameters["translation"] : false)
           );
         } else if ($function == "list") {
           $result = $this->$function(
@@ -134,7 +136,8 @@ class Built {
             (isset($parameters["active"]) ? $parameters["active"] : null), 
             (isset($parameters) ? $parameters : null), 
             (isset($parameters["extensions"]) ? $parameters["extensions"] : null), 
-            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false),
+            (isset($parameters["translation"]) ? $parameters["translation"] : false)
           );
         } else if ($function == "count") {
           $result = $this->$function(
@@ -203,12 +206,13 @@ class Built {
     return $result;
   }
 
-  function get($id, $active = null, $return_references = false) {
+  function get($id, $active = null, $return_references = false, $translation = false) {
 
     if ($this->validation->require($id, "ID")) {
 
       $active = Initialize::active($active);
       $return_references = Initialize::return_references($return_references);
+      $translation = Initialize::translation($translation);
 
       $filters = array("id" => $id);
       if (isset($active)) {
@@ -222,6 +226,38 @@ class Built {
         null, 
         $this->controls["view"]
       );
+      if (!empty($translation) && !empty($this->abstracts->component_language)) {
+        $translation_language = null;
+        if (is_numeric($translation)) {
+          $translation_language = $translation;
+        } else {
+          $language = new Language(
+            $this->session, 
+            Utilities::override_controls(true)
+          );
+          $language_list = $language->list(0, 1, null, null, null, array(
+            "short_name" => $translation_language
+          ));
+          if (!empty($language_list)) {
+            $translation_language = $language_list[0]->id;
+          }
+        }
+        if (!empty($translation_language)) {
+          $data_translate = $this->database->select(
+            (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+            "*", 
+            array(
+              "translate" => $data->id,
+              "language_id" => $translation_language
+            ), 
+            null, 
+            $this->controls["view"]
+          );
+          if (!empty($data_translate)) {
+            $data = $data_translate;
+          }
+        }
+      }
       if (!empty($data)) {
         $this->log->log(
           __FUNCTION__,
@@ -232,8 +268,14 @@ class Built {
           "id",
           $data->id
         );
-        $referers = $this->refer($return_references);
-        return $this->callback(__METHOD__, func_get_args(), $this->format($data, $return_references, $referers));
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($data, $return_references),
+          $this->session,
+          $this->controls,
+          $this->identifier
+        );
       } else {
         return null;
       }
@@ -251,7 +293,8 @@ class Built {
     $active = null, 
     $filters = array(), 
     $extensions = array(),
-    $return_references = false
+    $return_references = false,
+    $translation = false
   ) {
     
     $start = Initialize::start($start);
@@ -262,6 +305,7 @@ class Built {
     $filters = Initialize::filters($filters);
     $extensions = Initialize::extensions($extensions);
     $return_references = Initialize::return_references($return_references);
+    $translation = Initialize::translation($translation);
     
     if (
       $this->validation->filters($filters) 
@@ -270,6 +314,35 @@ class Built {
       
       if (isset($active)) {
         $filters["active"] = $active;
+      }
+      
+      if (!empty($this->abstracts->component_language)) {
+        if (empty($translation)) {
+          if (!isset($filters["translate"]) || empty($filters["translate"])) {
+            $filters["translate"] = "0";
+          }
+        } else {
+          if ($translation !== true) {
+            $translation_language = null;
+            if (is_numeric($translation)) {
+              $translation_language = $translation;
+            } else {
+              $language = new Language(
+                $this->session, 
+                Utilities::override_controls(true)
+              );
+              $language_list = $language->list(0, 1, null, null, null, array(
+                "short_name" => $translation_language
+              ));
+              if (!empty($language_list)) {
+                $translation_language = $language_list[0]->id;
+              }
+            }
+            if (!empty($translation_language)) {
+              $filters["translate"] = $translation_language;
+            }
+          }
+        }
       }
       
       $list = $this->database->select_multiple(
@@ -284,11 +357,6 @@ class Built {
         $this->controls["view"]
       );
       if (!empty($list)) {
-        $referers = $this->refer($return_references);
-        $data = array();
-        foreach ($list as $value) {
-          array_push($data, $this->format($value, $return_references, $referers));
-        }
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -298,7 +366,14 @@ class Built {
           null,
           null
         );
-        return $this->callback(__METHOD__, func_get_args(), $data);
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $this->format($list, $return_references),
+          $this->session,
+          $this->controls,
+          $this->identifier
+        );
       } else {
         return array();
       }
@@ -363,6 +438,7 @@ class Built {
           }
         }
         if (!$error || empty($files)) {
+
           $this->log->log(
             __FUNCTION__,
             __METHOD__,
@@ -372,11 +448,20 @@ class Built {
             "id",
             $data->id
           );
-          return $this->callback(
+
+          if (isset($parameters["translations"]) && !empty(isset($parameters["translations"]))) {
+            $this->translate($data->id, $parameters["translations"]);
+          }
+
+          return Utilities::callback(
             __METHOD__, 
             func_get_args(), 
-            $this->format($data)
+            $this->format($data),
+            $this->session,
+            $this->controls,
+            $this->identifier
           );
+
         } else {
           throw new Exception($this->translation->translate("Unable to upload"), 409);
         }
@@ -416,6 +501,7 @@ class Built {
           }
         }
         if (!$error || empty($files)) {
+
           $this->log->log(
             __FUNCTION__,
             __METHOD__,
@@ -425,11 +511,20 @@ class Built {
             "id",
             $data->id
           );
-          return $this->callback(
+
+          if (isset($parameters["translations"]) && !empty(isset($parameters["translations"]))) {
+            $this->translate($data->id, $parameters["translations"]);
+          }
+
+          return Utilities::callback(
             __METHOD__, 
             func_get_args(), 
-            $this->format($data)
+            $this->format($data),
+            $this->session,
+            $this->controls,
+            $this->identifier
           );
+
         } else {
           throw new Exception($this->translation->translate("Unable to upload"), 409);
         }
@@ -470,6 +565,7 @@ class Built {
           }
         }
         if (!$error || empty($files)) {
+
           $this->log->log(
             __FUNCTION__,
             __METHOD__,
@@ -479,11 +575,20 @@ class Built {
             "id",
             $data->id
           );
-          return $this->callback(
+
+          if (isset($parameters["translations"]) && !empty(isset($parameters["translations"]))) {
+            $this->translate($data->id, $parameters["translations"]);
+          }
+
+          return Utilities::callback(
             __METHOD__, 
             func_get_args(), 
-            $this->format($data)
+            $this->format($data),
+            $this->session,
+            $this->controls,
+            $this->identifier
           );
+
         } else {
           throw new Exception($this->translation->translate("Unable to upload"), 409);
         }
@@ -515,19 +620,31 @@ class Built {
               try {
                 $file_old = Utilities::backtrace() . trim($file, "/");
                 if (!empty($file) && file_exists($file_old)) {
-                  chmod($file_old, 0777);
-                  unlink($file_old);
+                  try {
+                    chmod($file_old, 0777);
+                  } catch (Exception $e) {}
+                  try {
+                    unlink($file_old);
+                  } catch (Exception $e) {}
                 }
                 if ($reference->type == "image-upload" || $reference->file_type == "image") {
                   $thumbnail_old = Utilities::get_thumbnail($file_old);
                   if (file_exists($thumbnail_old) && !is_dir($thumbnail_old)) {
-                    chmod($thumbnail_old, 0777);
-                    unlink($thumbnail_old);
+                    try {
+                      chmod($thumbnail_old, 0777);
+                    } catch (Exception $e) {}
+                    try {
+                      unlink($thumbnail_old);
+                    } catch (Exception $e) {}
                   }
                   $large_old = Utilities::get_large($file_old);
                   if (file_exists($large_old) && !is_dir($large_old)) {
-                    chmod($large_old, 0777);
-                    unlink($large_old);
+                    try {
+                      chmod($large_old, 0777);
+                    } catch (Exception $e) {}
+                    try {
+                      unlink($large_old);
+                    } catch (Exception $e) {}
                   }
                 }
                 return true;
@@ -562,10 +679,16 @@ class Built {
           "id",
           $data->id
         );
-        return $this->callback(
+
+        $this->distranslate($data->id);
+        
+        return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data)
+          $this->format($data),
+          $this->session,
+          $this->controls,
+          $this->identifier
         );
 
       } else {
@@ -784,8 +907,12 @@ class Built {
 
               } else {
                 if (file_exists($destination) && !is_dir($destination)) {
-                  chmod($destination, 0777);
-                  unlink($destination);
+                  try {
+                    chmod($destination, 0777);
+                  } catch (Exception $e) {}
+                  try {
+                    unlink($destination);
+                  } catch (Exception $e) {}
                 }
                 return false;
               }
@@ -827,9 +954,9 @@ class Built {
               $reference->type == "input-file-multiple"
               || $reference->type == "input-file-multiple-drop"
             ) {
-              if (isset($files[$key]) && isset($files[$key]["name"])) {
+              if (isset($files[$key]) && isset($files[$key]["name"]) && !empty($files[$key]["name"])) {
                 for ($i = 0; $i < count($files[$key]["name"]); $i++) {
-                  if (isset($files[$key]["name"][$i])) {
+                  if (isset($files[$key]["name"][$i]) && !empty($files[$key]["name"][$i])) {
                     if (
                       $path_id = $upload(
                         $reference,
@@ -861,7 +988,7 @@ class Built {
                 }
               }
             } else {
-              if (isset($files[$key]) && isset($files[$key]["name"])) {
+              if (isset($files[$key]) && isset($files[$key]["name"]) && !empty($files[$key]["name"])) {
                 if (
                   $reference->type == "input-file"
                   || $reference->type == "image-upload"
@@ -908,7 +1035,14 @@ class Built {
         
         if (empty($errors)) {
           if (!empty($successes)) {
-            return $this->callback(__METHOD__, func_get_args(), $successes);
+            return Utilities::callback(
+              __METHOD__, 
+              func_get_args(), 
+              $successes,
+              $this->session,
+              $this->controls,
+              $this->identifier
+            );
           } else {
             throw new Exception($this->translation->translate("No file has been uploaded"), 409);
           }
@@ -947,19 +1081,31 @@ class Built {
             try {
               $file_old = Utilities::backtrace() . trim($file, "/");
               if (!empty($file) && file_exists($file_old)) {
-                chmod($file_old, 0777);
-                unlink($file_old);
+                try {
+                  chmod($file_old, 0777);
+                } catch (Exception $e) {}
+                try {
+                  unlink($file_old);
+                } catch (Exception $e) {}
               }
               if ($reference->type == "image-upload" || $reference->file_type == "image") {
                 $thumbnail_old = Utilities::get_thumbnail($file_old);
                 if (file_exists($thumbnail_old) && !is_dir($thumbnail_old)) {
-                  chmod($thumbnail_old, 0777);
-                  unlink($thumbnail_old);
+                  try {
+                    chmod($thumbnail_old, 0777);
+                  } catch (Exception $e) {}
+                  try {
+                    unlink($thumbnail_old);
+                  } catch (Exception $e) {}
                 }
                 $large_old = Utilities::get_large($file_old);
                 if (file_exists($large_old) && !is_dir($large_old)) {
-                  chmod($large_old, 0777);
-                  unlink($large_old);
+                  try {
+                    chmod($large_old, 0777);
+                  } catch (Exception $e) {}
+                  try {
+                    unlink($large_old);
+                  } catch (Exception $e) {}
                 }
               }
               return true;
@@ -1034,7 +1180,14 @@ class Built {
           }
 
           if (empty($errors)) {
-            return $this->callback(__METHOD__, func_get_args(), $successes);
+            return Utilities::callback(
+              __METHOD__, 
+              func_get_args(), 
+              $successes,
+              $this->session,
+              $this->controls,
+              $this->identifier
+            );
           } else {
             throw new Exception($this->translation->translate("Unable to delete") . " '" . implode("', '", $errors) . "'", 409);
           }
@@ -1096,7 +1249,14 @@ class Built {
         foreach ($list as $value) {
           array_push($data, $this->format($value, $return_references));
         }
-        return $this->callback(__METHOD__, func_get_args(), $data);
+        return Utilities::callback(
+          __METHOD__, 
+          func_get_args(), 
+          $data,
+          $this->session,
+          $this->controls,
+          $this->identifier
+        );
       } else {
         return array();
       }
@@ -1119,6 +1279,9 @@ class Built {
       } else {
         unset($parameters["id"]);
         unset($parameters["create_at"]);
+      }
+      if (isset($parameters["translation"])) {
+        unset($parameters["translation"]);
       }
       foreach ($this->abstracts->references as $reference) {
         $key = $reference->key;
@@ -1152,7 +1315,9 @@ class Built {
           if ($reference->type != "input-multiple") {
             if (in_array($reference->type, $this->file_types)) {
               if (empty($update)) {
-                $parameters[$key] = "";
+                if (!empty($_FILES) && isset($_FILES[$key]) && !empty($_FILES[$key])) {
+                  $parameters[$key] = "";
+                }
               } else {
                 if (empty($parameters[$key])) {
                   if (!empty(
@@ -1164,13 +1329,19 @@ class Built {
                       $this->controls["update"]
                     )
                   )) {
-                    $this->remove($update, array(
-                      $key => $data_current->$key
-                    ));
+                    try {
+                      $this->remove($update, array(
+                        $key => $data_current->$key
+                      ));
+                    } catch (Exception $e) {
+
+                    }
                   }
                   $parameters[$key] = $inform_single($reference, $parameters[$key]);
                 } else {
-                  unset($parameters[$key]);
+                  if (!empty($_FILES) && isset($_FILES[$key]) && !empty($_FILES[$key])) {
+                    unset($parameters[$key]);
+                  }
                 }
               }
             } else {
@@ -1181,7 +1352,6 @@ class Built {
             foreach ($reference->references as $reference_multiple) {
               if (array_key_exists($reference_multiple->key, $parameters[$key])) {
                 if (in_array($reference_multiple->type, $this->file_types)) {
-                  unset($parameters[$key][$reference_multiple->key]);
                   if (empty($update)) {
                     $parameters[$key][$reference_multiple->key] = "";
                   } else {
@@ -1197,9 +1367,13 @@ class Built {
                       if (!empty($data_current->$key)) {
                         foreach (unserialize($data_current->$key) as $file) {
                           if (!in_array($file, $parameters[$key])) {
-                            $this->remove($update, array(
-                              $key => $file
-                            ));
+                            try {
+                              $this->remove($update, array(
+                                $key => $file
+                              ));
+                            } catch (Exception $e) {
+        
+                            }
                           }
                         }
                       }
@@ -1221,328 +1395,395 @@ class Built {
         }
       }
     }
-    return $this->callback(__METHOD__, func_get_args(), $parameters);
+    return Utilities::callback(
+      __METHOD__, 
+      func_get_args(), 
+      $parameters,
+      $this->session,
+      $this->controls,
+      $this->identifier
+    );
   }
 
-  function refer($return_references = false, $abstracts_override = null) {
+  function format($data, $return_references = false) {
 
-    $data = array();
-    
-    if (!empty($return_references)) {
+    /* function: create referers before format (better performance for list) */
+    $refer = function ($return_references = false, $abstracts_override = null) {
 
-      if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
-        if (!empty($this->abstracts->component_module)) {
-          $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
+      $data = array();
+      
+      if (!empty($return_references)) {
+  
+        if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+          if (!empty($this->abstracts->component_module)) {
+            $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
+          }
         }
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-        if (!empty($this->abstracts->component_user)) {
-          $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
+        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+          if (!empty($this->abstracts->component_user)) {
+            $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
+          }
         }
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("group_id", $return_references))) {
-        if (!empty($this->abstracts->component_group)) {
-          $data["group_id"] = new Group($this->session, Utilities::override_controls(true, true, true, true));
+        if ($return_references === true || (is_array($return_references) && in_array("group_id", $return_references))) {
+          if (!empty($this->abstracts->component_group)) {
+            $data["group_id"] = new Group($this->session, Utilities::override_controls(true, true, true, true));
+          }
         }
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("language_id", $return_references))) {
-        if (!empty($this->abstracts->component_language)) {
-          $data["language_id"] = new Language($this->session, Utilities::override_controls(true, true, true, true));
+        if ($return_references === true || (is_array($return_references) && in_array("language_id", $return_references))) {
+          if (!empty($this->abstracts->component_language)) {
+            $data["language_id"] = new Language($this->session, Utilities::override_controls(true, true, true, true));
+          }
         }
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
-        if (!empty($this->abstracts->component_page)) {
-          $data["page_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
+        if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
+          if (!empty($this->abstracts->component_page)) {
+            $data["page_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
+          }
         }
-      }
-      if ($return_references === true || (is_array($return_references) && in_array("media_id", $return_references))) {
-        if (!empty($this->abstracts->component_media)) {
-          $data["media_id"] = new Media($this->session, Utilities::override_controls(true, true, true, true));
+        if ($return_references === true || (is_array($return_references) && in_array("media_id", $return_references))) {
+          if (!empty($this->abstracts->component_media)) {
+            $data["media_id"] = new Media($this->session, Utilities::override_controls(true, true, true, true));
+          }
         }
-      }
-      foreach ($this->abstracts->references as $reference) {
-        $reference_key = $reference->key;
-        if ($return_references === true || (is_array($return_references) && in_array($reference_key, $return_references))) {
-          if (
-            $reference->input_option == "dynamic"
-            && !empty($reference->input_option_dynamic_module)
-            && !empty($reference->input_option_dynamic_value_key)
-          ) {
-            if (!empty(
-              $module_data = $this->database->select(
-                "module", 
-                "*", 
-                array("id" => $reference->input_option_dynamic_module), 
-                null, 
-                true,
-                false
-              )
-            )) {
-              $classes = explode("\\", get_class());
-              $namespace = "\\" . $classes[0] . "\\" . Utilities::create_class_name($module_data->key);
-              if (class_exists($namespace)) {
-                if (method_exists($namespace, "get")) {
-                  $built = new $namespace($this->session, Utilities::override_controls(true, true, true, true));
+        foreach ($this->abstracts->references as $reference) {
+          $reference_key = $reference->key;
+          if ($return_references === true || (is_array($return_references) && in_array($reference_key, $return_references))) {
+            if (
+              $reference->input_option == "dynamic"
+              && !empty($reference->input_option_dynamic_module)
+              && !empty($reference->input_option_dynamic_value_key)
+            ) {
+              if (!empty(
+                $module_data = $this->database->select(
+                  "module", 
+                  "*", 
+                  array("id" => $reference->input_option_dynamic_module), 
+                  null, 
+                  true,
+                  false
+                )
+              )) {
+                $classes = explode("\\", get_class());
+                $namespace = "\\" . $classes[0] . "\\" . Utilities::create_class_name($module_data->key);
+                if (class_exists($namespace)) {
+                  if (method_exists($namespace, "get")) {
+                    $built = new $namespace($this->session, Utilities::override_controls(true, true, true, true));
+                  } else {
+                    $built = new Built($this->session, Utilities::override_controls(true, true, true, true), $module_data->key);
+                  }
                 } else {
                   $built = new Built($this->session, Utilities::override_controls(true, true, true, true), $module_data->key);
                 }
-              } else {
-                $built = new Built($this->session, Utilities::override_controls(true, true, true, true), $module_data->key);
-              }
-              if (!empty($built)) {
-                $data[$reference_key] = $built;
+                if (!empty($built)) {
+                  $data[$reference_key] = $built;
+                }
               }
             }
           }
         }
       }
-    }
+  
+      return $data;
 
-    return $this->callback(__METHOD__, func_get_args(), $data);
+    };
 
-  }
-
-  function format($data, $return_references = false, $referers = null) {
-    if (!empty($data)) {
-      
-      if ($data->active === "1") {
-        $data->active = true;
-      } else if ($data->active === "0" || empty($data->active)) {
-        $data->active = false;
-      }
-
-      if (
-        $return_references === true || (
-          is_array($return_references) 
-          && is_array($return_references) && in_array("module_id", $return_references)
-          && is_array($referers) && !empty($referers) && isset($referers["module_id"]) && !empty($referers["module_id"])
-        )
-      ) {
-        if (isset($data->module_id)) {
-          $data->module_id_reference = null;
-          if (!empty($data->module_id)) {
-            $data->module_id_reference = $referers["module_id"]->format(
-              $this->database->get_reference(
-                $data->module_id,
-                "module",
-                "id"
-              )
-            );
-          }
+    /* function: format single data */
+    $format = function ($data, $return_references = false, $referers = null) {
+      if (!empty($data)) {
+        
+        if ($data->active === "1") {
+          $data->active = true;
+        } else if ($data->active === "0" || empty($data->active)) {
+          $data->active = false;
         }
-      }
-      if (
-        $return_references === true || (
-          is_array($return_references) 
-          && is_array($return_references) && in_array("user_id", $return_references)
-          && is_array($referers) && !empty($referers) && isset($referers["user_id"]) && !empty($referers["user_id"])
-        )
-      ) {
-        if (isset($data->user_id)) {
-          $data->user_id_reference = null;
-          if (!empty($data->user_id)) {
-            $data->user_id_reference = $referers["user_id"]->format(
-              $this->database->get_reference(
-                $data->user_id,
-                "user",
-                "id"
-              )
-            );
-          }
-        }
-      }
-      if (
-        $return_references === true || (
-          is_array($return_references) 
-          && is_array($return_references) && in_array("group_id", $return_references)
-          && is_array($referers) && !empty($referers) && isset($referers["group_id"]) && !empty($referers["group_id"])
-        )
-      ) {
-        if (isset($data->group_id)) {
-          $data->group_id_reference = null;
-          if (!empty($data->group_id)) {
-            $data->group_id_reference = $referers["group_id"]->format(
-              $this->database->get_reference(
-                $data->group_id,
-                "group",
-                "id"
-              )
-            );
-          }
-        }
-      }
-      if (
-        $return_references === true || (
-          is_array($return_references) 
-          && is_array($return_references) && in_array("language_id", $return_references)
-          && is_array($referers) && !empty($referers) && isset($referers["language_id"]) && !empty($referers["language_id"])
-        )
-      ) {
-        if (isset($data->language_id)) {
-          $data->language_id_reference = null;
-          if (!empty($data->language_id)) {
-            $data->language_id_reference = $referers["language_id"]->format(
-              $this->database->get_reference(
-                $data->language_id,
-                "language",
-                "id"
-              )
-            );
-          }
-        }
-      }
-      if (
-        $return_references === true || (
-          is_array($return_references) 
-          && is_array($return_references) && in_array("page_id", $return_references)
-          && is_array($referers) && !empty($referers) && isset($referers["page_id"]) && !empty($referers["page_id"])
-        )
-      ) {
-        if (isset($data->page_id)) {
-          $data->page_id_reference = null;
-          if (!empty($data->page_id)) {
-            $data->page_id_reference = $referers["page_id"]->format(
-              $this->database->get_reference(
-                $data->page_id,
-                "page",
-                "id"
-              )
-            );
-          }
-        }
-      }
-      if (
-        $return_references === true || (
-          is_array($return_references) 
-          && is_array($return_references) && in_array("media_id", $return_references)
-          && is_array($referers) && !empty($referers) && isset($referers["media_id"]) && !empty($referers["media_id"])
-        )
-      ) {
-        if (isset($data->media_id)) {
-          $data->media_id_reference = null;
-          if (!empty($data->media_id)) {
-            $data->media_id_reference = $referers["media_id"]->format(
-              $this->database->get_reference(
-                $data->media_id,
-                "media",
-                "id"
-              )
-            );
-          }
-        }
-      }
-
-      foreach ($this->abstracts->references as $reference) {
-        $key = $reference->key;
-        $reference_key = $reference->key . "_reference";
-        $data->$reference_key = null;
-        if (isset($data->$key)) {
-
-          if (in_array($reference->type, $this->multiple_types)) {
-            if (
-              empty($reference->input_multiple_format)
-              || $reference->input_multiple_format == "serialize" 
-            ) {
-              if (!empty($data->$key)) {
-                if (unserialize($data->$key)) {
-                  $data->$key = unserialize($data->$key);
-                } else {
-                  $data->$key = array();
-                }
-              } else {
-                $data->$key = array();
-              }
-            } else {
-              if (!empty($data->$key)) {
-                $data->$key = explode(",", $data->$key);
-              } else {
-                $data->$key = array();
-              }
-            }
-          }
-
-          if (
-            $reference->type == "image-upload" || $reference->file_type == "image"
-            || in_array($reference->type, $this->file_types)
-          ) {
-            $format_path = function($reference, $value) {
-              $path = (object) array(
-                "id" => $value,
-                "name" => basename($value),
-                "original" => null,
-                "thumbnail" => null,
-                "large" => null
-              );
-              if ($reference->type == "image-upload" || $reference->file_type == "image") {
-                $path->original = $value;
-                if (strpos($value, "http://") !== 0 || strpos($value, "https://") !== 0) {
-                  $path->original = $this->config["base_url"] . $value;
-                }
-                $path_thumnail = "";
-                if (file_exists(Utilities::get_thumbnail(Utilities::backtrace() . $value))) {
-                  $path_thumnail = Utilities::get_thumbnail($path->original);
-                }
-                $path->thumbnail = $path_thumnail;
-                $path_large = "";
-                if (file_exists(Utilities::get_large(Utilities::backtrace() . $value))) {
-                  $path_large = Utilities::get_large($path->original);
-                }
-                $path->large = $path_large;
-              } else if (in_array($reference->type, $this->file_types)) {
-                $path = (object) array(
-                  "id" => $value,
-                  "name" => basename($value),
-                  "path" => null
-                );
-                if (strpos($value, "http://") !== 0 || strpos($value, "https://") !== 0) {
-                  $path->path = $this->config["base_url"] . $value;
-                }
-              }
-              return $path;
-            };
-            if (is_array($data->$key)) {
-              $data->$reference_key = array();
-              foreach ($data->$key as $key_value) {
-                array_push($data->$reference_key, $format_path($reference, $key_value));
-              }
-            } else {
-              $data->$reference_key = $format_path($reference, $data->$key);
-            }
-          }
-
-          if (is_array($referers) && !empty($referers) && isset($referers[$key])) {
-            if (is_array($data->$key)) {
-              $data->$reference_key = array_map(
-                function ($value, $referer, $reference) {
-                  return $referer->format(
-                    $this->database->get_reference(
-                      $value,
-                      $referer->module->database_table,
-                      $reference->input_option_dynamic_value_key
-                    )
-                  );
-                }, 
-                $data->$key, 
-                array_fill(0, count($data->$key), $referers[$key]), 
-                array_fill(0, count($data->$key), $reference)
-              );
-            } else {
-              $data->$reference_key = $referers[$key]->format(
+  
+        if (
+          $return_references === true || (
+            is_array($return_references) 
+            && is_array($return_references) && in_array("module_id", $return_references)
+            && is_array($referers) && !empty($referers) && isset($referers["module_id"]) && !empty($referers["module_id"])
+          )
+        ) {
+          if (isset($data->module_id)) {
+            $data->module_id_reference = null;
+            if (!empty($data->module_id)) {
+              $data->module_id_reference = $referers["module_id"]->format(
                 $this->database->get_reference(
-                  $data->$key,
-                  $referers[$key]->module->database_table,
-                  $reference->input_option_dynamic_value_key
+                  $data->module_id,
+                  "module",
+                  "id"
                 )
               );
             }
           }
-
         }
+        if (
+          $return_references === true || (
+            is_array($return_references) 
+            && is_array($return_references) && in_array("user_id", $return_references)
+            && is_array($referers) && !empty($referers) && isset($referers["user_id"]) && !empty($referers["user_id"])
+          )
+        ) {
+          if (isset($data->user_id)) {
+            $data->user_id_reference = null;
+            if (!empty($data->user_id)) {
+              $data->user_id_reference = $referers["user_id"]->format(
+                $this->database->get_reference(
+                  $data->user_id,
+                  "user",
+                  "id"
+                )
+              );
+            }
+          }
+        }
+        if (
+          $return_references === true || (
+            is_array($return_references) 
+            && is_array($return_references) && in_array("group_id", $return_references)
+            && is_array($referers) && !empty($referers) && isset($referers["group_id"]) && !empty($referers["group_id"])
+          )
+        ) {
+          if (isset($data->group_id)) {
+            $data->group_id_reference = null;
+            if (!empty($data->group_id)) {
+              $data->group_id_reference = $referers["group_id"]->format(
+                $this->database->get_reference(
+                  $data->group_id,
+                  "group",
+                  "id"
+                )
+              );
+            }
+          }
+        }
+        if (
+          $return_references === true || (
+            is_array($return_references) 
+            && is_array($return_references) && in_array("language_id", $return_references)
+            && is_array($referers) && !empty($referers) && isset($referers["language_id"]) && !empty($referers["language_id"])
+          )
+        ) {
+          if (isset($data->language_id)) {
+            $data->language_id_reference = null;
+            if (!empty($data->language_id)) {
+              $data->language_id_reference = $referers["language_id"]->format(
+                $this->database->get_reference(
+                  $data->language_id,
+                  "language",
+                  "id"
+                )
+              );
+            }
+          }
+        }
+        if (
+          $return_references === true || (
+            is_array($return_references) 
+            && is_array($return_references) && in_array("page_id", $return_references)
+            && is_array($referers) && !empty($referers) && isset($referers["page_id"]) && !empty($referers["page_id"])
+          )
+        ) {
+          if (isset($data->page_id)) {
+            $data->page_id_reference = null;
+            if (!empty($data->page_id)) {
+              $data->page_id_reference = $referers["page_id"]->format(
+                $this->database->get_reference(
+                  $data->page_id,
+                  "page",
+                  "id"
+                )
+              );
+            }
+          }
+        }
+        if (
+          $return_references === true || (
+            is_array($return_references) 
+            && is_array($return_references) && in_array("media_id", $return_references)
+            && is_array($referers) && !empty($referers) && isset($referers["media_id"]) && !empty($referers["media_id"])
+          )
+        ) {
+          if (isset($data->media_id)) {
+            $data->media_id_reference = null;
+            if (!empty($data->media_id)) {
+              $data->media_id_reference = $referers["media_id"]->format(
+                $this->database->get_reference(
+                  $data->media_id,
+                  "media",
+                  "id"
+                )
+              );
+            }
+          }
+        }
+        if (
+          $return_references === true || (
+            is_array($return_references) 
+            && is_array($return_references) && in_array("translations", $return_references)
+          )
+        ) {
+          $translations = $this->list(
+            null, 
+            null, 
+            null, 
+            null, 
+            null, 
+            array("translate" => $data->id), 
+            null, 
+            array("language_id")
+          );
+          $data->translations = $translations;
+          $data->translations_key = (object) array();
+          foreach ($translations as $translation) {
+            $key = $translation->language_id;
+            $data->translations_key->$key = $translation;
+          }
+          foreach ($translations as $translation) {
+            if (!empty($translation->language_id_reference)) {
+              $key = strtolower($translation->language_id_reference->short_name);
+              $data->translations_key->$key = $translation;
+            }
+          }
+        }
+  
+        foreach ($this->abstracts->references as $reference) {
+          $key = $reference->key;
+          $reference_key = $reference->key . "_reference";
+          $data->$reference_key = null;
+          if (isset($data->$key)) {
+  
+            if (in_array($reference->type, $this->multiple_types)) {
+              if (
+                empty($reference->input_multiple_format)
+                || $reference->input_multiple_format == "serialize" 
+              ) {
+                if (!empty($data->$key)) {
+                  if (unserialize($data->$key)) {
+                    $data->$key = unserialize($data->$key);
+                  } else {
+                    $data->$key = array();
+                  }
+                } else {
+                  $data->$key = array();
+                }
+              } else {
+                if (!empty($data->$key)) {
+                  $data->$key = explode(",", $data->$key);
+                } else {
+                  $data->$key = array();
+                }
+              }
+            }
+  
+            if (
+              $reference->type == "image-upload" || $reference->file_type == "image"
+              || in_array($reference->type, $this->file_types)
+            ) {
+              $format_path = function($reference, $value) {
+                $path = (object) array(
+                  "id" => $value,
+                  "name" => basename($value),
+                  "original" => null,
+                  "thumbnail" => null,
+                  "large" => null
+                );
+                if ($reference->type == "image-upload" || $reference->file_type == "image") {
+                  $path->original = $value;
+                  if (strpos($value, "http://") !== 0 || strpos($value, "https://") !== 0) {
+                    $path->original = $this->config["base_url"] . $value;
+                  }
+                  $path_thumnail = "";
+                  if (file_exists(Utilities::get_thumbnail(Utilities::backtrace() . $value))) {
+                    $path_thumnail = Utilities::get_thumbnail($path->original);
+                  }
+                  $path->thumbnail = $path_thumnail;
+                  $path_large = "";
+                  if (file_exists(Utilities::get_large(Utilities::backtrace() . $value))) {
+                    $path_large = Utilities::get_large($path->original);
+                  }
+                  $path->large = $path_large;
+                } else if (in_array($reference->type, $this->file_types)) {
+                  $path = (object) array(
+                    "id" => $value,
+                    "name" => basename($value),
+                    "path" => null
+                  );
+                  if (strpos($value, "http://") !== 0 || strpos($value, "https://") !== 0) {
+                    $path->path = $this->config["base_url"] . $value;
+                  }
+                }
+                return $path;
+              };
+              if (is_array($data->$key)) {
+                $data->$reference_key = array();
+                foreach ($data->$key as $key_value) {
+                  array_push($data->$reference_key, $format_path($reference, $key_value));
+                }
+              } else {
+                $data->$reference_key = $format_path($reference, $data->$key);
+              }
+            }
+  
+            if (is_array($referers) && !empty($referers) && isset($referers[$key])) {
+              if (is_array($data->$key)) {
+                $data->$reference_key = array_map(
+                  function ($value, $referer, $reference) {
+                    return $referer->format(
+                      $this->database->get_reference(
+                        $value,
+                        $referer->module->database_table,
+                        $reference->input_option_dynamic_value_key
+                      )
+                    );
+                  }, 
+                  $data->$key, 
+                  array_fill(0, count($data->$key), $referers[$key]), 
+                  array_fill(0, count($data->$key), $reference)
+                );
+              } else {
+                $data->$reference_key = $referers[$key]->format(
+                  $this->database->get_reference(
+                    $data->$key,
+                    $referers[$key]->module->database_table,
+                    $reference->input_option_dynamic_value_key
+                  )
+                );
+              }
+            }
+  
+          }
+        }
+  
       }
+      return $data;
+    };
 
+    /* create referers */
+    $referers = $refer($return_references);
+    if (!is_array($data)) {
+      /* format single data */
+      $data = $format($data, $return_references, $referers);
+    } else {
+      /* format array data */
+      $data = array_map(
+        function($value, $return_references, $referers, $format) { 
+          return $format($value, $return_references, $referers); 
+        }, 
+        $data, 
+        array_fill(0, count($data), $return_references), 
+        array_fill(0, count($data), $referers), 
+        array_fill(0, count($data), $format)
+      );
     }
 
-    return $this->callback(__METHOD__, func_get_args(), $data);
+    return Utilities::callback(
+      __METHOD__, 
+      func_get_args(), 
+      $data,
+      $this->session,
+      $this->controls,
+      $this->identifier
+    );
 
   }
 
@@ -1634,7 +1875,14 @@ class Built {
         }
       }
     }
-    return $this->callback(__METHOD__, func_get_args(), $result);
+    return Utilities::callback(
+      __METHOD__, 
+      func_get_args(), 
+      $result,
+      $this->session,
+      $this->controls,
+      $this->identifier
+    );
   }
 
   function simulate($module_id = null, $override_module = null) {
@@ -1798,26 +2046,66 @@ class Built {
     }
   }
 
-  function callback($function, $arguments, $result) {
-    $names = explode("::", $function);
-    $classes = explode("\\", $names[0]);
-    $namespace = "\\" . $classes[0] . "\\" . "Callback" . "\\" . $this->class;
-    if (class_exists($namespace)) {
-      if (method_exists($namespace, $names[1])) {
-        $callback = new $namespace($this->session, $this->controls, $this->identifier);
-        try {
-          $function_name = $names[1];
-          return $callback->$function_name($arguments, $result);
-        } catch(Exception $e) {
-          throw new Exception($e->getMessage(), $e->getCode());
+  private function translate($id, $translations = null) {
+    if (!empty($translations) && !empty($this->abstracts->component_language)) {
+      $translations_current_list = $this->list(
+        null, 
+        null, 
+        null, 
+        null, 
+        null, 
+        array(
+          "translate" => $id
+        )
+      );
+      foreach ($translations_current_list as $translations_current) {
+        if (
+          !in_array(
+            $translations_current->language_id, 
+            array_map(function($value) {
+              return isset($value["language_id"]) ? $value["language_id"] : null;
+            }, $translations)
+          )
+        ) {
+          $this->delete($translations_current->id);
         }
-        return $result;
-      } else {
-        return $result;
       }
+      foreach ($translations as $translation) {
+        $translation["translate"] = $id;
+        if (
+          in_array(
+            $translation["language_id"], 
+            array_map(function($value) {
+              return $value->language_id;
+            }, $translations_current_list)
+          )
+        ) {
+          $this->patch($translations_current->id, $translation);
+        } else {
+          $this->create($translation);
+        }
+      }
+      return true;
     } else {
-      return $result;
+      return false;
     }
+  }
+
+  private function distranslate($id) {
+    $translations_current_list = $this->list(
+      null, 
+      null, 
+      null, 
+      null, 
+      null, 
+      array(
+        "translate" => $id
+      )
+    );
+    foreach ($translations_current_list as $translations_current) {
+      $this->patch($translations_current->id, array("translate" => "0"));
+    }
+    return true;
   }
 
 }
