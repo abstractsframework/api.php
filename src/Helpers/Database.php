@@ -867,9 +867,8 @@ class Database {
     $data = null;
 
     if (!empty($controls)) {
-
       $data_current_list = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys);
-      if (!empty($data_current)) {
+      if (!empty($data_current_list)) {
 
         $connection = $this->connect();
         if ($connection) {

@@ -195,7 +195,7 @@ class Initialize {
 
   public static function translation($translation) {
     return isset($translation) ? (
-      ($translation === "true" || $translation === "1" || $translation === 1) ? true 
+      ($translation === "true") ? true 
       : ($translation === "false" || $translation === "0" || $translation === 0 ? false : $translation)
     ) : null;
   }

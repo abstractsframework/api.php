@@ -28,7 +28,6 @@ class Built {
   public $abstracts = null;
 
   /* core */
-  private $class = null;
   private $config = null;
   private $session = null;
   private $controls = null;
@@ -83,7 +82,6 @@ class Built {
     $this->controls = $initialize->controls;
     $this->id = $initialize->id;
     $this->module = $initialize->module;
-    $this->class = $initialize->class;
     
     /* initialize: helpers */
     $this->database = new Database($this->session, $this->controls);
@@ -145,7 +143,8 @@ class Built {
             (isset($parameters["limit"]) ? $parameters["limit"] : null), 
             (isset($parameters["active"]) ? $parameters["active"] : null), 
             (isset($parameters) ? $parameters : null), 
-            (isset($parameters["extensions"]) ? $parameters["extensions"] : null)
+            (isset($parameters["extensions"]) ? $parameters["extensions"] : null),
+            (isset($parameters["translation"]) ? $parameters["translation"] : false)
           );
         } else if ($function == "create") {
           $result = $this->$function(
@@ -206,14 +205,14 @@ class Built {
     return $result;
   }
 
-  function get($id, $active = null, $return_references = false, $translation = false) {
+  function get($id, $active = null, $return_references = false, $translation = false, $format = true) {
 
     if ($this->validation->require($id, "ID")) {
 
       $active = Initialize::active($active);
       $return_references = Initialize::return_references($return_references);
       $translation = Initialize::translation($translation);
-
+      
       $filters = array("id" => $id);
       if (isset($active)) {
         $filters["active"] = $active;
@@ -236,7 +235,7 @@ class Built {
             Utilities::override_controls(true)
           );
           $language_list = $language->list(0, 1, null, null, null, array(
-            "short_name" => $translation_language
+            "short_name" => $translation
           ));
           if (!empty($language_list)) {
             $translation_language = $language_list[0]->id;
@@ -254,7 +253,57 @@ class Built {
             $this->controls["view"]
           );
           if (!empty($data_translate)) {
+
+            $id = $data->id;
+            $create_at = $data->create_at;
+            $user_id = null;
+            if (isset($data->user_id)) {
+              $user_id = $data->user_id;
+            }
+            $module_id = null;
+            if (isset($data->module_id)) {
+              $module_id = $data->module_id;
+            }
+            $group_id = null;
+            if (isset($data->group_id)) {
+              $group_id = $data->group_id;
+            }
+            $page_id = null;
+            if (isset($data->page_id)) {
+              $page_id = $data->page_id;
+            }
+            $media_id = null;
+            if (isset($data->media_id)) {
+              $media_id = $data->media_id;
+            }
+            $translate = null;
+            if (isset($data->translate)) {
+              $translate = $data->translate;
+            }
+
             $data = $data_translate;
+
+            $data->id = $id;
+            $data->create_at = $create_at;
+            if (!empty($user_id)) {
+              $data->user_id = $user_id;
+            }
+            if (!empty($module_id)) {
+              $data->module_id = $module_id;
+            }
+            if (!empty($group_id)) {
+              $data->group_id = $group_id;
+            }
+            if (!empty($page_id)) {
+              $data->page_id = $page_id;
+            }
+            if (!empty($media_id)) {
+              $data->media_id = $media_id;
+            }
+            if (!empty($translate)) {
+              $data->translate = $translate;
+            }
+
           }
         }
       }
@@ -271,7 +320,7 @@ class Built {
         return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data, $return_references),
+          $format === true ? $this->format($data, $return_references) : $data,
           $this->session,
           $this->controls,
           $this->identifier
@@ -294,7 +343,8 @@ class Built {
     $filters = array(), 
     $extensions = array(),
     $return_references = false,
-    $translation = false
+    $translation = false,
+    $format = true
   ) {
     
     $start = Initialize::start($start);
@@ -316,6 +366,7 @@ class Built {
         $filters["active"] = $active;
       }
       
+      $translation_language = null;
       if (!empty($this->abstracts->component_language)) {
         if (empty($translation)) {
           if (!isset($filters["translate"]) || empty($filters["translate"])) {
@@ -323,7 +374,7 @@ class Built {
           }
         } else {
           if ($translation !== true) {
-            $translation_language = null;
+            $filters["translate"] = "0";
             if (is_numeric($translation)) {
               $translation_language = $translation;
             } else {
@@ -332,14 +383,11 @@ class Built {
                 Utilities::override_controls(true)
               );
               $language_list = $language->list(0, 1, null, null, null, array(
-                "short_name" => $translation_language
+                "short_name" => $translation
               ));
               if (!empty($language_list)) {
                 $translation_language = $language_list[0]->id;
               }
-            }
-            if (!empty($translation_language)) {
-              $filters["translate"] = $translation_language;
             }
           }
         }
@@ -357,6 +405,11 @@ class Built {
         $this->controls["view"]
       );
       if (!empty($list)) {
+        if (!empty($this->abstracts->component_language) && !empty($translation_language)) {
+          $list = array_map(function ($value, $translation_language) {
+            return $this->get($value->id, true, false, $translation_language, false);
+          }, $list, array_fill(0, count($list), $translation_language));
+        }
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -369,7 +422,7 @@ class Built {
         return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($list, $return_references),
+          $format === true ? $this->format($list, $return_references) : $list,
           $this->session,
           $this->controls,
           $this->identifier
@@ -387,7 +440,8 @@ class Built {
     $limit = null, 
     $active = null, 
     $filters = array(), 
-    $extensions = array()
+    $extensions = array(),
+    $translation = false
   ) {
 
     $start = Initialize::start($start);
@@ -395,14 +449,29 @@ class Built {
     $active = Initialize::active($active);
     $filters = Initialize::filters($filters);
     $extensions = Initialize::extensions($extensions);
+    $translation = Initialize::translation($translation);
     
     if (
       $this->validation->filters($filters) 
       && $this->validation->extensions($extensions)
     ) {
+
       if (isset($active)) {
         $filters["active"] = $active;
       }
+      
+      if (!empty($this->abstracts->component_language)) {
+        if (empty($translation)) {
+          if (!isset($filters["translate"]) || empty($filters["translate"])) {
+            $filters["translate"] = "0";
+          }
+        } else {
+          if ($translation !== true) {
+            $filters["translate"] = "0";
+          }
+        }
+      }
+
       $data = $this->database->count(
         (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
         $filters, 
@@ -411,7 +480,9 @@ class Built {
         $limit, 
         $this->controls["view"]
       );
+
       return $data;
+
     } else {
       return false;
     }
@@ -1319,30 +1390,52 @@ class Built {
                   $parameters[$key] = "";
                 }
               } else {
-                if (empty($parameters[$key])) {
-                  if (!empty(
-                    $data_current = $this->database->select(
-                      (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
-                      array($key), 
-                      array("id" => $update), 
-                      null, 
-                      $this->controls["update"]
-                    )
-                  )) {
-                    try {
-                      $this->remove($update, array(
-                        $key => $data_current->$key
-                      ));
-                    } catch (Exception $e) {
+                if (!empty(
+                  $data_current = $this->database->select(
+                    (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                    array($key), 
+                    array("id" => $update), 
+                    null, 
+                    $this->controls["update"]
+                  )
+                )) {
+                  if (in_array($reference->type, $this->multiple_types)) {
+                    if (
+                      empty($reference->input_multiple_format)
+                      || $reference->input_multiple_format == "serialize"
+                    ) {
+                      if (unserialize($data_current->$key)) {
+                        $data_current->$key = unserialize($data_current->$key);
+                      } else {
+                        $data_current->$key = array();
+                      }
+                    } else {
+                      $data_current->$key = explode(",", $data_current->$key);
+                    }
+                    foreach ($data_current->$key as $value) {
+                      if (!in_array($value, $parameters[$key])) {
+                        try {
+                          $this->remove($update, array(
+                            $key => $value
+                          ));
+                        } catch (Exception $e) {
+  
+                        }
+                      }
+                    }
+                  } else {
+                    if (empty($parameters[$key])) {
+                      try {
+                        $this->remove($update, array(
+                          $key => $data_current->$key
+                        ));
+                      } catch (Exception $e) {
 
+                      }
                     }
                   }
-                  $parameters[$key] = $inform_single($reference, $parameters[$key]);
-                } else {
-                  if (!empty($_FILES) && isset($_FILES[$key]) && !empty($_FILES[$key])) {
-                    unset($parameters[$key]);
-                  }
                 }
+                $parameters[$key] = $inform_single($reference, $parameters[$key]);
               }
             } else {
               $parameters[$key] = $inform_single($reference, $parameters[$key]);
@@ -1658,17 +1751,21 @@ class Built {
                 || $reference->input_multiple_format == "serialize" 
               ) {
                 if (!empty($data->$key)) {
-                  if (unserialize($data->$key)) {
-                    $data->$key = unserialize($data->$key);
-                  } else {
-                    $data->$key = array();
+                  if (!is_array($data->$key)) {
+                    if (unserialize($data->$key)) {
+                      $data->$key = unserialize($data->$key);
+                    } else {
+                      $data->$key = array();
+                    }
                   }
                 } else {
                   $data->$key = array();
                 }
               } else {
                 if (!empty($data->$key)) {
-                  $data->$key = explode(",", $data->$key);
+                  if (!is_array($data->$key)) {
+                    $data->$key = explode(",", $data->$key);
+                  }
                 } else {
                   $data->$key = array();
                 }
