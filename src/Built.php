@@ -1386,9 +1386,7 @@ class Built {
           if ($reference->type != "input-multiple") {
             if (in_array($reference->type, $this->file_types)) {
               if (empty($update)) {
-                if (!empty($_FILES) && isset($_FILES[$key]) && !empty($_FILES[$key])) {
-                  $parameters[$key] = "";
-                }
+                $parameters[$key] = $inform_single($reference, $parameters[$key]);
               } else {
                 if (!empty(
                   $data_current = $this->database->select(
