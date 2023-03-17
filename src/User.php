@@ -16,6 +16,7 @@ use \Abstracts\Hash;
 use \Abstracts\Mail;
 
 use Exception;
+use finfo;
 
 class User {
 
@@ -2707,15 +2708,44 @@ class User {
       if (isset($parameters["password"]) && !empty($update)) {
         unset($parameters["password"]);
       }
+      
       if (isset($parameters["image"])) {
-        unset($parameters["image"]);
-        if (empty($update)) {
-          if (!empty($_FILES) && isset($_FILES["image"]) && !empty($_FILES["image"])) {
+        if (
+          is_string($parameters["image"])
+          && base64_decode($parameters["image"], true) !== false 
+          && base64_encode(base64_decode($parameters["image"], true)) === $parameters["image"]
+        ) {
+          try {
+            $base64_data = substr($parameters["image"], strpos($parameters["image"], ',') + 1);
+            $base64_data_decoded = base64_decode($base64_data);
+            $finfo = new finfo(FILEINFO_MIME_TYPE);
+            $mime = $finfo->buffer($base64_data_decoded);
+            $extension = strtolower(pathinfo($mime, PATHINFO_EXTENSION));
+            $base64_decoded = base64_decode($parameters["image"]);
+            $type = finfo_buffer(finfo_open(), $base64_decoded, FILEINFO_MIME_TYPE);
+            $tmp_file = tmpfile();
+            fwrite($tmp_file, $base64_decoded);
+            $uploaded_file = [
+              "name" => "image." . $extension,
+              "type" => $type,
+              "size" => strlen($base64_decoded),
+              "tmp_name" => stream_get_meta_data($tmp_file)["uri"],
+              "error" => UPLOAD_ERR_OK
+            ];
+            $_FILES["image"] = $uploaded_file;
+          } catch (Exception $e) {}
+          if (empty($update)) {
             $parameters["image"] = "";
+          } else {
+            unset($parameters["image"]);
           }
         } else {
-          if (!empty($_FILES) && isset($_FILES["image"]) && !empty($_FILES["image"])) {
-            unset($parameters["image"]);
+          if (!is_string($parameters["image"])) {
+            if (empty($update)) {
+              $parameters["image"] = "";
+            } else {
+              unset($parameters["image"]);
+            }
           }
         }
       }

@@ -85,7 +85,15 @@ class Route {
           }
         } else {
           if ($_SERVER["REQUEST_METHOD"] === "POST") {
-            $function = "create";
+            if (isset($_REQUEST["id"])) {
+              if (isset($_POST["id"]) && !empty($_POST["id"])) {
+                $function = "update";
+              } else {
+                $function = "patch";
+              }
+            } else {
+              $function = "create";
+            }
           } else if ($_SERVER["REQUEST_METHOD"] === "COPY") {
             $function = "copy";
           }

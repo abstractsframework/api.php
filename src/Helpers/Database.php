@@ -687,7 +687,7 @@ class Database {
             // $data_current = $this->select_multiple($table, "*", $filters, $extensions, null, null, null, null, true, $clean_keys);
             
             $query = "UPDATE `" . $table . "` SET " . implode(", ", $sets) . " " . $conditions . ";";
-
+            
             if (mysqli_query($connection, $query)) {
               $data = $this->select_multiple($table, "*", $filters, $extensions, $controls, null, null, null, true, $clean_keys);
             } else {

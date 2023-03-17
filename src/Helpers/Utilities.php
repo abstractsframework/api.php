@@ -79,6 +79,7 @@ class Utilities {
       // Fetch content and determine boundary
       $raw_data = file_get_contents('php://input');
       if (!empty($raw_data)) {
+
         $boundary = substr($raw_data, 0, strpos($raw_data, "\r\n"));
 
         if (!empty($boundary)) {

@@ -18,6 +18,7 @@ use \Abstracts\Language;
 
 use Exception;
 use DateTime;
+use finfo;
 
 class Built {
 
@@ -225,89 +226,89 @@ class Built {
         null, 
         $this->controls["view"]
       );
-      if (!empty($translation) && !empty($this->abstracts->component_language)) {
-        $translation_language = null;
-        if (is_numeric($translation)) {
-          $translation_language = $translation;
-        } else {
-          $language = new Language(
-            $this->session, 
-            Utilities::override_controls(true)
-          );
-          $language_list = $language->list(0, 1, null, null, null, array(
-            "short_name" => $translation
-          ));
-          if (!empty($language_list)) {
-            $translation_language = $language_list[0]->id;
-          }
-        }
-        if (!empty($translation_language)) {
-          $data_translate = $this->database->select(
-            (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
-            "*", 
-            array(
-              "translate" => $data->id,
-              "language_id" => $translation_language
-            ), 
-            null, 
-            $this->controls["view"]
-          );
-          if (!empty($data_translate)) {
-
-            $id = $data->id;
-            $create_at = $data->create_at;
-            $user_id = null;
-            if (isset($data->user_id)) {
-              $user_id = $data->user_id;
-            }
-            $module_id = null;
-            if (isset($data->module_id)) {
-              $module_id = $data->module_id;
-            }
-            $group_id = null;
-            if (isset($data->group_id)) {
-              $group_id = $data->group_id;
-            }
-            $page_id = null;
-            if (isset($data->page_id)) {
-              $page_id = $data->page_id;
-            }
-            $media_id = null;
-            if (isset($data->media_id)) {
-              $media_id = $data->media_id;
-            }
-            $translate = null;
-            if (isset($data->translate)) {
-              $translate = $data->translate;
-            }
-
-            $data = $data_translate;
-
-            $data->id = $id;
-            $data->create_at = $create_at;
-            if (!empty($user_id)) {
-              $data->user_id = $user_id;
-            }
-            if (!empty($module_id)) {
-              $data->module_id = $module_id;
-            }
-            if (!empty($group_id)) {
-              $data->group_id = $group_id;
-            }
-            if (!empty($page_id)) {
-              $data->page_id = $page_id;
-            }
-            if (!empty($media_id)) {
-              $data->media_id = $media_id;
-            }
-            if (!empty($translate)) {
-              $data->translate = $translate;
-            }
-
-          }
-        }
-      }
       if (!empty($data)) {
+        if (!empty($translation) && !empty($this->abstracts->component_language)) {
+          $translation_language = null;
+          if (is_numeric($translation)) {
+            $translation_language = $translation;
+          } else {
+            $language = new Language(
+              $this->session, 
+              Utilities::override_controls(true)
+            );
+            $language_list = $language->list(0, 1, null, null, null, array(
+              "short_name" => $translation
+            ));
+            if (!empty($language_list)) {
+              $translation_language = $language_list[0]->id;
+            }
+          }
+          if (!empty($translation_language)) {
+            $data_translate = $this->database->select(
+              (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+              "*", 
+              array(
+                "active" => $active,
+                "translate" => $id,
+                "language_id" => $translation_language
+              ), 
+              null, 
+              $this->controls["view"]
+            );
+            if (!empty($data_translate)) {
+  
+              $create_at = $data->create_at;
+              $user_id = null;
+              if (isset($data->user_id)) {
+                $user_id = $data->user_id;
+              }
+              $module_id = null;
+              if (isset($data->module_id)) {
+                $module_id = $data->module_id;
+              }
+              $group_id = null;
+              if (isset($data->group_id)) {
+                $group_id = $data->group_id;
+              }
+              $page_id = null;
+              if (isset($data->page_id)) {
+                $page_id = $data->page_id;
+              }
+              $media_id = null;
+              if (isset($data->media_id)) {
+                $media_id = $data->media_id;
+              }
+              $translate = null;
+              if (isset($data->translate)) {
+                $translate = $data->translate;
+              }
+  
+              $data = $data_translate;
+  
+              $data->id = $id;
+              $data->create_at = $create_at;
+              if (!empty($user_id)) {
+                $data->user_id = $user_id;
+              }
+              if (!empty($module_id)) {
+                $data->module_id = $module_id;
+              }
+              if (!empty($group_id)) {
+                $data->group_id = $group_id;
+              }
+              if (!empty($page_id)) {
+                $data->page_id = $page_id;
+              }
+              if (!empty($media_id)) {
+                $data->media_id = $media_id;
+              }
+              if (!empty($translate)) {
+                $data->translate = $translate;
+              }
+  
+            }
+          }
+        }
         $this->log->log(
           __FUNCTION__,
           __METHOD__,
@@ -407,7 +408,12 @@ class Built {
       if (!empty($list)) {
         if (!empty($this->abstracts->component_language) && !empty($translation_language)) {
           $list = array_map(function ($value, $translation_language) {
-            return $this->get($value->id, true, false, $translation_language, false);
+            $translation_data = $this->get($value->id, true, false, $translation_language, false);
+            if (!empty($translation_data)) {
+              return $translation_data;
+            } else {
+              return $value;
+            }
           }, $list, array_fill(0, count($list), $translation_language));
         }
         $this->log->log(
@@ -687,7 +693,7 @@ class Built {
 
             $key = $reference->key;
 
-            $delete = function($reference, $file) {
+            $remove = function($reference, $file) {
               try {
                 $file_old = Utilities::backtrace() . trim($file, "/");
                 if (!empty($file) && file_exists($file_old)) {
@@ -730,11 +736,11 @@ class Built {
             ) {
               if (!empty($data->$key)) {
                 foreach (unserialize($data->$key) as $file) {
-                  $delete($reference, $file);
+                  $remove($reference, $file);
                 }
               }
             } else {
-              $delete($reference, $data->$key);
+              $remove($reference, $data->$key);
             }
 
           }
@@ -1148,7 +1154,7 @@ class Built {
           )
         )) {
 
-          $delete = function($reference, $file) {
+          $remove = function($reference, $file) {
             try {
               $file_old = Utilities::backtrace() . trim($file, "/");
               if (!empty($file) && file_exists($file_old)) {
@@ -1194,14 +1200,14 @@ class Built {
 
                 if (is_array($parameters[$key])) {
                   foreach ($parameters[$key] as $file) {
-                    if ($delete($reference, $file)) {
+                    if ($remove($reference, $file)) {
                       array_push($successes, $file);
                     } else {
                       array_push($errors, $file);
                     }
                   }
                 } else {
-                  if ($delete($reference, $parameters[$key])) {
+                  if ($remove($reference, $parameters[$key])) {
                     array_push($successes, $parameters[$key]);
                   } else {
                     array_push($errors, $parameters[$key]);
@@ -1338,77 +1344,170 @@ class Built {
 
   function inform($parameters, $update = false, $user_id = 0) {
     if (!empty($parameters)) {
+      
       if (!$update) {
         if (isset($parameters["id"])) {
           $parameters["id"] = $parameters["id"];
         } else {
           $parameters["id"] = null;
         }
-        $parameters["active"] = (isset($parameters["active"]) ? $parameters["active"] : true);
+        $parameters["active"] = (isset($parameters["active"]) ? (Initialize::active($parameters["active"])) : true);
         $parameters["user_id"] = (!empty($user_id) ? $user_id : (!empty($this->session) ? $this->session->id : 0));
         $parameters["create_at"] = gmdate("Y-m-d H:i:s");
       } else {
         unset($parameters["id"]);
         unset($parameters["create_at"]);
+        if (isset($parameters["active"])) {
+          $parameters["active"] = Initialize::active($parameters["active"]);
+        }
       }
       if (isset($parameters["translation"])) {
         unset($parameters["translation"]);
       }
+
       foreach ($this->abstracts->references as $reference) {
         $key = $reference->key;
         if (array_key_exists($key, $parameters)) {
-          $inform_single = function($reference, $value) {
+          
+          $inform = function ($parameters, $reference) {
+            $key = $reference->key;
+            /* 
+            check if reference is array type but data is not array 
+            then convert data to array 
+            */
             if (in_array($reference->type, $this->multiple_types)) {
-              if (
-                empty($reference->input_multiple_format)
-                || $reference->input_multiple_format == "serialize"
-              ) {
-                if (!empty($value)) {
-                  if (serialize($value)) {
-                    return serialize($value);
-                  } else {
-                    return serialize(array());
-                  }
-                } else {
-                  return serialize(array());
+              if (!is_array($parameters[$key])) {
+                if (
+                  empty($reference->input_multiple_format)
+                  || $reference->input_multiple_format == "serialize"
+                ) {
+                  try {
+                    if (is_string($parameters[$key])) {
+                      $parameters[$key] = unserialize($parameters[$key]);
+                    }
+                  } catch (Exception $e) {}
                 }
-              } else {
-                if (!empty($value) && is_array($value)) {
-                  return implode(",", $value);
-                } else {
-                  return implode(",", array());
+                if (!is_array($parameters[$key])) {
+                  if (is_string($parameters[$key])) {
+                    $parameters[$key] = explode(",", $parameters[$key]);
+                  } else {
+                    $parameters[$key] = array();
+                  }
                 }
               }
-            } else {
-              return $value;
             }
-          };
-          if ($reference->type != "input-multiple") {
+
+            /* check if reference is file type */
             if (in_array($reference->type, $this->file_types)) {
-              if (empty($update)) {
-                $parameters[$key] = $inform_single($reference, $parameters[$key]);
+
+              $create_tmp_file = function ($base64, $name) {
+                $base64_data = substr($base64, strpos($base64, ',') + 1);
+                $base64_data_decoded = base64_decode($base64_data);
+                $finfo = new finfo(FILEINFO_MIME_TYPE);
+                $mime = $finfo->buffer($base64_data_decoded);
+                $extension = strtolower(pathinfo($mime, PATHINFO_EXTENSION));
+                $base64_decoded = base64_decode($base64);
+                $type = finfo_buffer(finfo_open(), $base64_decoded, FILEINFO_MIME_TYPE);
+                $tmp_file = tmpfile();
+                fwrite($tmp_file, $base64_decoded);
+                $uploaded_file = [
+                  "name" => $name . "." . $extension,
+                  "type" => $type,
+                  "size" => strlen($base64_decoded),
+                  "tmp_name" => stream_get_meta_data($tmp_file)["uri"],
+                  "error" => UPLOAD_ERR_OK
+                ];
+                return $uploaded_file;
+              };
+
+              /* clean parameter if value is file data */
+              if (in_array($reference->type, $this->multiple_types)) {
+                $tmp_files = array();
+                for ($i = 0; $i < count($parameters[$key]); $i++) {
+                  if (
+                    is_string($parameters[$key][$i])
+                    && base64_decode($parameters[$key][$i], true) !== false 
+                    && base64_encode(base64_decode($parameters[$key][$i], true)) === $parameters[$key]
+                  ) {
+                    array_push($tmp_files, $create_tmp_file($parameters[$key][$i], $key . "_" . $i));
+                    unset($parameters[$key][$i]);
+                  } else {
+                    if (!is_string($parameters[$key][$i])) {
+                      unset($parameters[$key][$i]);
+                    }
+                  }
+                }
+                if (!empty($tmp_files)) {
+                  $_FILES[$key . "[]"] = array(
+                    "name" => "",
+                    "type" => "",
+                    "size" => "",
+                    "tmp_name" => "",
+                    "error" => ""
+                  );
+                  foreach ($tmp_files as $tmp_file) {
+                    $_FILES[$key . "[]"]["image"] .= "," . $tmp_file["name"];
+                    $_FILES[$key . "[]"]["type"] .= "," . $tmp_file["type"];
+                    $_FILES[$key . "[]"]["size"] .= "," . $tmp_file["size"];
+                    $_FILES[$key . "[]"]["tmp_name"] .= "," . $tmp_file["tmp_name"];
+                    $_FILES[$key . "[]"]["error"] .= "," . $tmp_file["error"];
+                  }
+                }
               } else {
-                if (!empty(
-                  $data_current = $this->database->select(
-                    (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
-                    array($key), 
-                    array("id" => $update), 
-                    null, 
-                    $this->controls["update"]
-                  )
-                )) {
-                  if (in_array($reference->type, $this->multiple_types)) {
-                    if (
-                      empty($reference->input_multiple_format)
-                      || $reference->input_multiple_format == "serialize"
-                    ) {
-                      if (unserialize($data_current->$key)) {
-                        $data_current->$key = unserialize($data_current->$key);
-                      } else {
-                        $data_current->$key = array();
-                      }
+                if (
+                  is_string($parameters[$key])
+                  && base64_decode($parameters[$key], true) !== false 
+                  && base64_encode(base64_decode($parameters[$key], true)) === $parameters[$key]
+                ) {
+                  try {
+                    $_FILES[$key] = $create_tmp_file($parameters[$key], $key);
+                  } catch (Exception $e) {}
+                  if (empty($update)) {
+                    $parameters[$key] = "";
+                  } else {
+                    unset($parameters[$key]);
+                  }
+                } else {
+                  if (!is_string($parameters[$key])) {
+                    if (empty($update)) {
+                      $parameters[$key] = "";
                     } else {
-                      $data_current->$key = explode(",", $data_current->$key);
+                      unset($parameters[$key]);
+                    }
+                  }
+                }
+              }
+
+              /* clean uploaded file before update */
+              $data_current = null;
+              if (!empty($update)) {
+                $data_current = $this->database->select(
+                  (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                  array($key), 
+                  array("id" => $update), 
+                  null, 
+                  $this->controls["update"]
+                );
+                if (!empty($data_current)) {
+                  if (in_array($reference->type, $this->multiple_types)) {
+                    if (isset($data_current->$key) && !is_array($data_current->$key)) {
+                      if (
+                        empty($reference->input_multiple_format)
+                        || $reference->input_multiple_format == "serialize"
+                      ) {
+                        try {
+                          if (is_string($data_current->$key)) {
+                            $data_current->$key = unserialize($data_current->$key);
+                          }
+                        } catch (Exception $e) {}
+                      }
+                      if (!is_array($data_current->$key)) {
+                        if (is_string($data_current->$key)) {
+                          $data_current->$key = explode(",", $data_current->$key);
+                        } else {
+                          $data_current->$key = array();
+                        }
+                      }
                     }
                     foreach ($data_current->$key as $value) {
                       if (!in_array($value, $parameters[$key])) {
@@ -1416,75 +1515,73 @@ class Built {
                           $this->remove($update, array(
                             $key => $value
                           ));
-                        } catch (Exception $e) {
-  
-                        }
+                        } catch (Exception $e) {}
                       }
                     }
                   } else {
-                    if (empty($parameters[$key])) {
-                      try {
-                        $this->remove($update, array(
-                          $key => $data_current->$key
-                        ));
-                      } catch (Exception $e) {
-
+                    if (!empty($data_current->$key)) {
+                      if (isset($parameters[$key]) && $parameters[$key] != $data_current->$key) {
+                        try {
+                          $this->remove($update, array(
+                            $key => $data_current->$key
+                          ));
+                        } catch (Exception $e) {}
                       }
                     }
                   }
                 }
-                $parameters[$key] = $inform_single($reference, $parameters[$key]);
               }
-            } else {
-              $parameters[$key] = $inform_single($reference, $parameters[$key]);
+
             }
-          } else {
-            $parameters[$key] = serialize($parameters[$key]);
-            foreach ($reference->references as $reference_multiple) {
-              if (array_key_exists($reference_multiple->key, $parameters[$key])) {
-                if (in_array($reference_multiple->type, $this->file_types)) {
-                  if (empty($update)) {
-                    $parameters[$key][$reference_multiple->key] = "";
-                  } else {
-                    if (!empty(
-                      $data_current = $this->database->select(
-                        (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
-                        array($key), 
-                        array("id" => $update), 
-                        null, 
-                        $this->controls["update"]
-                      )
-                    )) {
-                      if (!empty($data_current->$key)) {
-                        foreach (unserialize($data_current->$key) as $file) {
-                          if (!in_array($file, $parameters[$key])) {
-                            try {
-                              $this->remove($update, array(
-                                $key => $file
-                              ));
-                            } catch (Exception $e) {
-        
-                            }
-                          }
-                        }
-                      }
-                    }
-                    if (empty($parameters[$key][$reference_multiple->key])) {
-                      $parameters[$key][$reference_multiple->key] 
-                      = $inform_single($reference_multiple, $parameters[$key][$reference_multiple->key]);
+
+            $result = $parameters[$key];
+            if (isset($parameters[$key])) {
+              if (in_array($reference->type, $this->multiple_types)) {
+                if (
+                  empty($reference->input_multiple_format)
+                  || $reference->input_multiple_format == "serialize"
+                ) {
+                  if (!empty($parameters[$key])) {
+                    if (serialize($parameters[$key])) {
+                      $result = serialize($parameters[$key]);
                     } else {
-                      unset($parameters[$key][$reference_multiple->key]);
+                      $result = serialize(array());
                     }
+                  } else {
+                    $result = serialize(array());
                   }
                 } else {
-                  $parameters[$key][$reference_multiple->key] 
-                  = $inform_single($reference_multiple, $parameters[$key][$reference_multiple->key]);
+                  if (!empty($parameters[$key]) && is_array($parameters[$key])) {
+                    $result = implode(",", $parameters[$key]);
+                  } else {
+                    $result = implode(",", array());
+                  }
                 }
+              } else {
+                $result = $parameters[$key];
+              }
+            }
+
+            return $result;
+
+          };
+
+          if ($reference->type != "input-multiple") {
+            $parameters[$key] = $inform($parameters, $reference);
+          } else {
+            foreach ($reference->references as $reference_multiple) {
+              if (array_key_exists($reference_multiple->key, $parameters[$key])) {
+                $parameters[$key][$reference_multiple->key] = $inform(
+                  $parameters[$key], 
+                  $reference_multiple
+                );
               }
             }
           }
+
         }
       }
+      
     }
     return Utilities::callback(
       __METHOD__, 
@@ -1750,9 +1847,9 @@ class Built {
               ) {
                 if (!empty($data->$key)) {
                   if (!is_array($data->$key)) {
-                    if (unserialize($data->$key)) {
+                    try {
                       $data->$key = unserialize($data->$key);
-                    } else {
+                    } catch (Exception $e) {
                       $data->$key = array();
                     }
                   }
@@ -2187,18 +2284,20 @@ class Built {
   }
 
   private function distranslate($id) {
-    $translations_current_list = $this->list(
-      null, 
-      null, 
-      null, 
-      null, 
-      null, 
-      array(
-        "translate" => $id
-      )
-    );
-    foreach ($translations_current_list as $translations_current) {
-      $this->patch($translations_current->id, array("translate" => "0"));
+    if (!empty($this->abstracts->component_language)) {
+      $translations_current_list = $this->list(
+        null, 
+        null, 
+        null, 
+        null, 
+        null, 
+        array(
+          "translate" => $id
+        )
+      );
+      foreach ($translations_current_list as $translations_current) {
+        $this->patch($translations_current->id, array("translate" => "0"));
+      }
     }
     return true;
   }
