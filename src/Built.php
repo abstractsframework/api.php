@@ -256,6 +256,19 @@ class Built {
               $this->controls["view"]
             );
             if (!empty($data_translate)) {
+              $data_translate = $this->database->select(
+                (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
+                "*", 
+                array(
+                  "active" => $active,
+                  "id" => $data->translate,
+                  "language_id" => $translation_language
+                ), 
+                null, 
+                $this->controls["view"]
+              );
+            }
+            if (!empty($data_translate)) {
   
               $create_at = $data->create_at;
               $user_id = null;
@@ -1805,10 +1818,12 @@ class Built {
           }
         }
         if (
-          $return_references === true || (
-            is_array($return_references) 
-            && is_array($return_references) && in_array("translations", $return_references)
-          )
+          (
+            $return_references === true || (
+              is_array($return_references) 
+              && is_array($return_references) && in_array("translations", $return_references)
+            )
+          ) && !empty($this->abstracts->component_language)
         ) {
           $translations = $this->list(
             null, 
@@ -1837,7 +1852,6 @@ class Built {
         foreach ($this->abstracts->references as $reference) {
           $key = $reference->key;
           $reference_key = $reference->key . "_reference";
-          $data->$reference_key = null;
           if (isset($data->$key)) {
   
             if (in_array($reference->type, $this->multiple_types)) {
@@ -1915,7 +1929,7 @@ class Built {
                 $data->$reference_key = $format_path($reference, $data->$key);
               }
             }
-  
+            
             if (is_array($referers) && !empty($referers) && isset($referers[$key])) {
               if (is_array($data->$key)) {
                 $data->$reference_key = array_map(
