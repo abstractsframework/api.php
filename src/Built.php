@@ -61,6 +61,12 @@ class Built {
     "checkbox",
     "checkbox-inline"
   );
+  private $number_types = array(
+    "input-number"
+  );
+  private $decimal_types = array(
+    "input-decimal"
+  );
   private $date_types = array(
     "input-date"
   );
@@ -1878,6 +1884,24 @@ class Built {
                 } else {
                   $data->$key = array();
                 }
+              }
+            }
+
+            if (in_array($reference->type, $this->number_types)) {
+              if (is_array($data->$key)) {
+                for ($i = 0; $i < count($data->$key); $i++) {
+                  $data->$key[$i] = intval($data->$key);
+                }
+              } else {
+                $data->$key = intval($data->$key);
+              }
+            } else if (in_array($reference->type, $this->decimal_types)) {
+              if (is_array($data->$key)) {
+                for ($i = 0; $i < count($data->$key); $i++) {
+                  $data->$key[$i] = floatval($data->$key);
+                }
+              } else {
+                $data->$key = floatval($data->$key);
               }
             }
   
