@@ -228,10 +228,8 @@ class User {
       && $this->validation->require($password, "Password")
     ) {
 
-      $password_hash = hash("sha256", md5($password . $this->config["password_salt"]));
       $filters = array(
-        "active" => true,
-        "password" => $password_hash
+        "active" => true
       );
       $extensions = array(
         array(
@@ -243,6 +241,12 @@ class User {
         array(
           "conjunction" => "OR",
           "key" => "email",
+          "operator" => "=",
+          "value" => "'" . $username . "'",
+        ),
+        array(
+          "conjunction" => "OR",
+          "key" => "phone",
           "operator" => "=",
           "value" => "'" . $username . "'",
         )
@@ -257,119 +261,149 @@ class User {
       );
       if (!empty($data)) {
 
-        $result = function($data, $session_id, $update_at, $expire_at, $function) {
-          if (
-            isset($this->config["encrypt_authorization"]) 
-            && !empty($this->config["encrypt_authorization"])
-          ) {
-            
-            $values = array(
-              "session_id" => $session_id,
-              "id" => $data->id,
-              "iss" => strtotime($update_at),
-              "exp" => strtotime($expire_at)
-            );
-  
-            try {
-              $token = $this->encryption->encode(
-                $values, 
-                $this->config["encrypt_ssl_private_key"], 
-                $this->config["encrypt_authorization"]
-              );
-              if ($token !== false) {
-                $data->token = $token;
-                return Utilities::callback(
-                  $function, 
-                  func_get_args(), 
-                  $data,
-                  $this->session,
-                  $this->controls,
-                  $this->id
-                );
-              } else {
-                throw new Exception($this->translation->translate("Invalid authorization"), 401);
-              }
-            } catch(Exception $e) {
-              throw new Exception($e->getMessage(), 500);
-            }
-            
-          } else {
-            $data->token = base64_encode($data->id . "." . $session_id);
-            return Utilities::callback(
-              $function, 
-              func_get_args(), 
-              $data,
-              $this->session,
-              $this->controls,
-              $this->id
-            );
-          }
-        };
+        $password_hash = hash("sha256", md5($password . $this->config["password_salt"]));
+        $filters["password"] = hash("sha256", md5($password . $this->config["password_salt"]));
 
-        $data = $this->format($data, false, true);
-
-        $session_id = session_id();
-        $update_at = gmdate("Y-m-d H:i:s");
-        $expire_at = gmdate("Y-m-d H:i:s", strtotime($this->config["session_duration"]));
+        $data_password = $this->database->select(
+          "user", 
+          "*", 
+          $filters, 
+          $extensions, 
+          true,
+          false
+        );
         
-        if (isset($remember) && (!empty($remember))) {
-          if (!$this->update_device($data->id, $session_id)) {
-            $device = new Device($this->session, 
-              Utilities::override_controls(true, true, true, true)
-            );
-            $device_user_agent = $device->get_device();
-            $device_parameters = array(
-              "id" => null,
-              "name" => "",
-              "session" => $session_id,
-              "token" => ((isset($device_info) && isset($device_info["token"])) ? $device_info["token"] : ""),
-              "platform" => $device_user_agent->platform,
-              "browser" => $device_user_agent->browser,
-              "os" => $device_user_agent->os->name,
-              "os_version" => $device_user_agent->os->version,
-              "model" => ((isset($device_info) && isset($device_info["model"])) ? $device_info["model"] : ""),
-              "manufacturer" => ((isset($device_info) && isset($device_info["manufacturer"])) ? $device_info["manufacturer"] : ""),
-              "uuid" => ((isset($device_info) && isset($device_info["uuid"])) ? $device_info["uuid"] : ""),
-              "user_agent" => $_SERVER["HTTP_USER_AGENT"],
-              "is_mobile" => ($device_user_agent->is_mobile) ? true : false,
-              "is_native" => ($device_user_agent->is_native) ? true : false,
-              "is_virtual" => ((isset($device_info) && isset($device_info["is_virtual"])) ? true : false),
-              "app_name" => ((isset($device_info) && isset($device_info["app_name"])) ? $device_info["app_name"] : ""),
-              "app_id" => ((isset($device_info) && isset($device_info["app_id"])) ? $device_info["app_id"] : ""),
-              "app_version" => ((isset($device_info) && isset($device_info["app_version"])) ? $device_info["app_version"] : ""),
-              "app_build" => ((isset($device_info) && isset($device_info["app_build"])) ? $device_info["app_build"] : ""),
-              "ip_recent" => $_SERVER["REMOTE_ADDR"],
-              "update_at" => $update_at,
-              "expire_at" => $expire_at,
-              "active" => true,
-              "user_id" => $data->id
-            );
+        $data_hash = $this->database->select(
+          "hash", 
+          "*", 
+          array(
+            "hash" => $password_hash,
+            "content" => $data->id
+          ), 
+          null, 
+          true,
+          false
+        );
+
+        if (!empty($data_password) || !empty($data_hash)) {
+
+          $result = function($data, $session_id, $update_at, $expire_at, $function) {
             if (
-              $this->database->insert(
-                "device", 
-                $device_parameters, 
-                true,
-                false
-              )
+              isset($this->config["encrypt_authorization"]) 
+              && !empty($this->config["encrypt_authorization"])
             ) {
-              $this->log->log(
-                __FUNCTION__,
-                __METHOD__,
-                "low",
-                func_get_args(),
-                (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-                "id",
-                $data->id
+              
+              $values = array(
+                "session_id" => $session_id,
+                "id" => $data->id,
+                "iss" => strtotime($update_at),
+                "exp" => strtotime($expire_at)
               );
-              return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
+    
+              try {
+                $token = $this->encryption->encode(
+                  $values, 
+                  $this->config["encrypt_ssl_private_key"], 
+                  $this->config["encrypt_authorization"]
+                );
+                if ($token !== false) {
+                  $data->token = $token;
+                  return Utilities::callback(
+                    $function, 
+                    func_get_args(), 
+                    $data,
+                    $this->session,
+                    $this->controls,
+                    $this->id
+                  );
+                } else {
+                  throw new Exception($this->translation->translate("Invalid authorization"), 401);
+                }
+              } catch(Exception $e) {
+                throw new Exception($e->getMessage(), 500);
+              }
+              
             } else {
-              return false;
+              $data->token = base64_encode($data->id . "." . $session_id);
+              return Utilities::callback(
+                $function, 
+                func_get_args(), 
+                $data,
+                $this->session,
+                $this->controls,
+                $this->id
+              );
+            }
+          };
+
+          $data = $this->format($data, false, true);
+
+          $session_id = session_id();
+          $update_at = gmdate("Y-m-d H:i:s");
+          $expire_at = gmdate("Y-m-d H:i:s", strtotime($this->config["session_duration"]));
+          
+          if (isset($remember) && (!empty($remember))) {
+            if (!$this->update_device($data->id, $session_id)) {
+              $device = new Device($this->session, 
+                Utilities::override_controls(true, true, true, true)
+              );
+              $device_user_agent = $device->get_device();
+              $device_parameters = array(
+                "id" => null,
+                "name" => "",
+                "session" => $session_id,
+                "token" => ((isset($device_info) && isset($device_info["token"])) ? $device_info["token"] : ""),
+                "platform" => $device_user_agent->platform,
+                "browser" => $device_user_agent->browser,
+                "os" => $device_user_agent->os->name,
+                "os_version" => $device_user_agent->os->version,
+                "model" => ((isset($device_info) && isset($device_info["model"])) ? $device_info["model"] : ""),
+                "manufacturer" => ((isset($device_info) && isset($device_info["manufacturer"])) ? $device_info["manufacturer"] : ""),
+                "uuid" => ((isset($device_info) && isset($device_info["uuid"])) ? $device_info["uuid"] : ""),
+                "user_agent" => $_SERVER["HTTP_USER_AGENT"],
+                "is_mobile" => ($device_user_agent->is_mobile) ? true : false,
+                "is_native" => ($device_user_agent->is_native) ? true : false,
+                "is_virtual" => ((isset($device_info) && isset($device_info["is_virtual"])) ? true : false),
+                "app_name" => ((isset($device_info) && isset($device_info["app_name"])) ? $device_info["app_name"] : ""),
+                "app_id" => ((isset($device_info) && isset($device_info["app_id"])) ? $device_info["app_id"] : ""),
+                "app_version" => ((isset($device_info) && isset($device_info["app_version"])) ? $device_info["app_version"] : ""),
+                "app_build" => ((isset($device_info) && isset($device_info["app_build"])) ? $device_info["app_build"] : ""),
+                "ip_recent" => $_SERVER["REMOTE_ADDR"],
+                "update_at" => $update_at,
+                "expire_at" => $expire_at,
+                "active" => true,
+                "user_id" => $data->id
+              );
+              if (
+                $this->database->insert(
+                  "device", 
+                  $device_parameters, 
+                  true,
+                  false
+                )
+              ) {
+                $this->log->log(
+                  __FUNCTION__,
+                  __METHOD__,
+                  "low",
+                  func_get_args(),
+                  (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                  "id",
+                  $data->id
+                );
+                return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
+              } else {
+                return false;
+              }
+            } else {
+              return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
             }
           } else {
             return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
           }
+
         } else {
-          return $result($data, $session_id, $update_at, $expire_at, __METHOD__);
+          throw new Exception($this->translation->translate("Invalid authorization"), 401);
         }
 
       } else {
@@ -2263,15 +2297,9 @@ class User {
         $username = $this->session->username;
       }
       
-      $password_hash = hash("sha256", md5($password . $this->config["password_salt"]));
       $filters = array(
-        "active" => true,
-        "password" => $password_hash
+        "active" => true
       );
-      if ($this->session->password_set) {
-        $filters["active"] = true;
-        $filters["password"] = $password_hash;
-      }
       $extensions = array(
         array(
           "conjunction" => "",
@@ -2282,6 +2310,12 @@ class User {
         array(
           "conjunction" => "OR",
           "key" => "email",
+          "operator" => "=",
+          "value" => "'" . $username . "'",
+        ),
+        array(
+          "conjunction" => "OR",
+          "key" => "phone",
           "operator" => "=",
           "value" => "'" . $username . "'",
         )
@@ -2296,94 +2330,142 @@ class User {
       );
       if (!empty($user_data)) {
 
-        if (
-          $this->validation->require($password, "Current Password")
-          && $this->validation->require($password_new, "New Password")
-          && $this->validation->string_min($password_new, "New Password", 8)
-          && $this->validation->string_max($password_new, "New Password", 100)
-          && $this->validation->password($password_new, "New Password")
-          && $this->validation->password_equal_to($password_new, "New Password", $confirm_password_new)
-        ) {
-    
-          $password_new_hash = hash(
-            "sha256", 
-            md5(implode("", $password_new) . $this->config["password_salt"])
-          );
-          $data = $this->database->update(
-            "user", 
-            array(
-              "password" => $password_new_hash
-            ), 
-            array("id" => $user_data->id), 
-            null, 
-            true
-          );
-          if (!empty($data)) {
+        $password_hash = hash("sha256", md5($password . $this->config["password_salt"]));
+        if ($this->session->password_set) {
 
-            $data = $data[0];
-    
-            if (!empty($user_data->email)) {
-              try {
-                $mail = new Mail($this->session, 
-                  Utilities::override_controls(true, true, true, true)
-                );
-                $mail_subject = 
-                $this->translation->translate("You have updated password at") 
-                . " " 
-                . $this->config["site_name"];
-                $mail_body = 
-                $user_data->name . ","
-                . "\n\n"
-                . $this->translation->translate("You have updated password at") 
-                . " " 
-                . $this->config["site_name"];
-                if (!empty($template = $mail->template("password-updated.php"))) {
-                  foreach (get_object_vars($user_data) as $key => $value) {
-                    if ($key != "password" && $key != "passcode") {
-                      $template = str_replace("{{" . $key . "}}", $value, $template);
-                    }
-                  }
-                  $mail_body = $template;
-                }
-                $mail->send(
-                  $this->config["email"], 
-                  $this->config["site_name"], 
-                  $user_data->email, 
-                  null,
-                  null,
-                  $mail_subject, 
-                  $mail_body
-                );
-              } catch (Exception $e) {}
-            }
-    
-            $this->log->log(
-              __FUNCTION__,
-              __METHOD__,
-              "normal",
-              func_get_args(),
-              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-              "id",
-              $data->id
-            );
-            return Utilities::callback(
-              __METHOD__, 
-              func_get_args(), 
-              $this->format($data),
-              $this->session,
-              $this->controls,
-              $this->id
-            );
-    
-          } else {
-            return $data;
-          }
-    
-        } else {
-          throw new Exception(
-            $this->translation->translate("Email or Phone is required to reset password"), 
-            400
+          $filters["password"] = hash("sha256", md5($password . $this->config["password_salt"]));
+
+          $data_password = $this->database->select(
+            "user", 
+            "*", 
+            $filters, 
+            $extensions, 
+            true,
+            false
           );
+          
+          $data_hash = $this->database->select(
+            "hash", 
+            "*", 
+            array(
+              "hash" => $password_hash,
+              "content" => $user_data->id
+            ), 
+            null, 
+            true,
+            false
+          );
+
+        }
+
+        if ((!empty($data_password) || !empty($data_hash)) || !$this->session->password_set) {
+
+          if (!empty($user_data->email) || !empty($user_data->phone)) {
+
+            if (
+              $this->validation->require($password, "Current Password")
+              && $this->validation->require($password_new, "New Password")
+              && $this->validation->string_min($password_new, "New Password", 8)
+              && $this->validation->string_max($password_new, "New Password", 100)
+              && $this->validation->password($password_new, "New Password")
+              && $this->validation->password_equal_to($password_new, "New Password", $confirm_password_new)
+            ) {
+        
+              $data = $this->database->update(
+                "user", 
+                array(
+                  "password" => hash(
+                    "sha256", 
+                    md5($password_new . $this->config["password_salt"])
+                  )
+                ), 
+                array("id" => $user_data->id), 
+                null, 
+                true
+              );
+              if (!empty($data)) {
+
+                $data = $data[0];
+
+                if (!empty($data_hash)) {
+                  try {
+                    $this->database->delete(
+                      "hash", 
+                      array(
+                        "id" => $data_hash->id
+                      )
+                    );
+                  } catch (Exception $e) {}
+                }
+        
+                if (!empty($user_data->email)) {
+                  try {
+                    $mail = new Mail($this->session, 
+                      Utilities::override_controls(true, true, true, true)
+                    );
+                    $mail_subject = 
+                    $this->translation->translate("You have updated password at") 
+                    . " " 
+                    . $this->config["site_name"];
+                    $mail_body = 
+                    $user_data->name . ","
+                    . "\n\n"
+                    . $this->translation->translate("You have updated password at") 
+                    . " " 
+                    . $this->config["site_name"];
+                    if (!empty($template = $mail->template("password-updated.php"))) {
+                      foreach (get_object_vars($user_data) as $key => $value) {
+                        if ($key != "password" && $key != "passcode") {
+                          $template = str_replace("{{" . $key . "}}", $value, $template);
+                        }
+                      }
+                      $mail_body = $template;
+                    }
+                    $mail->send(
+                      $this->config["email"], 
+                      $this->config["site_name"], 
+                      $user_data->email, 
+                      null,
+                      null,
+                      $mail_subject, 
+                      $mail_body
+                    );
+                  } catch (Exception $e) {}
+                }
+        
+                $this->log->log(
+                  __FUNCTION__,
+                  __METHOD__,
+                  "normal",
+                  func_get_args(),
+                  (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+                  "id",
+                  $data->id
+                );
+                return Utilities::callback(
+                  __METHOD__, 
+                  func_get_args(), 
+                  $this->format($data),
+                  $this->session,
+                  $this->controls,
+                  $this->id
+                );
+        
+              } else {
+                return $data;
+              }
+        
+            }
+        
+          } else {
+            throw new Exception(
+              $this->translation->translate("Email or Phone is required to reset password"), 
+              400
+            );
+          }
+
+        } else {
+          throw new Exception("Invalid authorization", 401);
         }
 
       } else {
@@ -2398,147 +2480,141 @@ class User {
     }
   }
 
-  function reset_password($email = null, $phone = null) {
+  function reset_password($username) {
     if (!empty($email) || !empty($phone)) {
 
-      $seed_alphabet = str_split(
-        "abcdefghijklmnopqrstuvwxyz"
-        . "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+      $filters = array(
+        "active" => true
       );
-      shuffle($seed_alphabet);
-      $password_alphabet = "";
-      foreach (array_rand($seed_alphabet, 5) as $k) $password_alphabet .= $seed_alphabet[$k];
-
-      $seed_number = str_split("0123456789");
-      shuffle($seed_number);
-      $password_number = "";
-      foreach (array_rand($seed_number, 5) as $k) $password_number .= $seed_number[$k];
-
-      $seed_special = str_split("!#$%&()*+,-./:;<=>?@[\]^_{|}~");
-      shuffle($seed_special);
-      $password_special = "";
-      foreach (array_rand($seed_special, 5) as $k) $password_special .= $seed_special[$k];
-
-      $password = str_split($password_alphabet . $password_number . $password_special);
-      shuffle($password);
-      $password_hash = hash(
-        "sha256", 
-        md5(implode("", $password) . $this->config["password_salt"])
+      $extensions = array(
+        array(
+          "conjunction" => "",
+          "key" => "username",
+          "operator" => "=",
+          "value" => "'" . $username . "'",
+        ),
+        array(
+          "conjunction" => "OR",
+          "key" => "email",
+          "operator" => "=",
+          "value" => "'" . $username . "'",
+        ),
+        array(
+          "conjunction" => "OR",
+          "key" => "phone",
+          "operator" => "=",
+          "value" => "'" . $username . "'",
+        )
       );
-
-      $filters = array();
-      if (!empty($email)) {
-        $filters["email"] = $email;
-      }
-      if (!empty($phone)) {
-        $filters["phone"] = $phone;
-      }
       if (!empty(
         $user_data = $this->database->select(
           "user", 
           "*", 
           $filters, 
-          null, 
+          $extensions, 
           true
         )
       )) {
 
-        $data = $this->database->update(
-          "user", 
-          array(
-            "password" => $password
-          ), 
-          array("id" => $user_data->id), 
-          null, 
-          true
+        $seed_alphabet = str_split(
+          "abcdefghijklmnopqrstuvwxyz"
+          . "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
         );
-        if (!empty($data)) {
-          
-          $data = $data[0];
-
-          $hash = new Hash($this->session, 
-            Utilities::override_controls(true, true, true, true)
-          );
-          $hash_parameters = array(
-            "content" => $password_hash,
-            "active" => true
-          );
-          if (!empty($hash_data = $hash->create($hash_parameters))) {
+        shuffle($seed_alphabet);
+        $password_alphabet = "";
+        foreach (array_rand($seed_alphabet, 5) as $k) $password_alphabet .= $seed_alphabet[$k];
   
-            if (!empty($email)) {
-              try {
-                $mail = new Mail($this->session, 
-                  Utilities::override_controls(true, true, true, true)
-                );
-                $mail_subject = 
-                $this->translation->translate("You have requested to reset password at") 
-                . " " 
-                . $this->config["site_name"];
-                $mail_body = 
-                $user_data->name . ","
-                . "\n\n"
-                . $this->translation->translate("You have requested to reset password at") 
-                . " " 
-                . $this->config["site_name"]
-                . "\n"
-                . $this->translation->translate("Your new password is") 
-                . " "
-                . $hash_data->content;
-                if (!empty($template = $mail->template("password-reset.php"))) {
-                  foreach (get_object_vars($user_data) as $key => $value) {
-                    if ($key != "password" && $key != "passcode") {
-                      $template = str_replace("{{" . $key . "}}", $value, $template);
-                    }
-                  }
-                  $template = str_replace("{{password}}", $hash_data->content, $template);
-                  $template = str_replace("{{hash}}", $hash_data->hash, $template);
-                  $mail_body = $template;
-                }
-                $mail->send(
-                  $this->config["email"], 
-                  $this->config["site_name"], 
-                  $email, 
-                  null,
-                  null,
-                  $mail_subject, 
-                  $mail_body
-                );
-              } catch (Exception $e) {
-                $data = $this->database->update(
-                  "user", 
-                  array(
-                    "password" => $user_data->password
-                  ), 
-                  array("id" => $user_data->id), 
-                  null, 
-                  true
-                );
-                throw new Exception($e->getMessage(), $e->getCode());
-              }
-            }
-    
-            $this->log->log(
-              __FUNCTION__,
-              __METHOD__,
-              "normal",
-              func_get_args(),
-              (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
-              "id",
-              $data->id
-            );
-            return Utilities::callback(
-              __METHOD__, 
-              func_get_args(), 
-              $this->format($data),
-              $this->session,
-              $this->controls,
-              $this->id
-            );
+        $seed_number = str_split("0123456789");
+        shuffle($seed_number);
+        $password_number = "";
+        foreach (array_rand($seed_number, 5) as $k) $password_number .= $seed_number[$k];
+  
+        $seed_special = str_split("!#$%&()*+,-./:;<=>?@[\]^_{|}~");
+        shuffle($seed_special);
+        $password_special = "";
+        foreach (array_rand($seed_special, 5) as $k) $password_special .= $seed_special[$k];
+  
+        $password = str_split($password_alphabet . $password_number . $password_special);
+        shuffle($password);
 
+        $password_reset = implode("", $password);
+
+        $password_reset_hash = hash(
+          "sha256", 
+          md5($password_reset . $this->config["password_salt"])
+        );
+
+        $hash = new Hash($this->session, 
+          Utilities::override_controls(true, true, true, true)
+        );
+        $hash_parameters = array(
+          "hash" => $password_reset_hash,
+          "content" => $user_data->id,
+          "active" => true
+        );
+        if (!empty($hash_data = $hash->create($hash_parameters))) {
+
+          if (!empty($user_data->email)) {
+            try {
+              $mail = new Mail($this->session, 
+                Utilities::override_controls(true, true, true, true)
+              );
+              $mail_subject = 
+              $this->translation->translate("You have requested to reset password at") 
+              . " " 
+              . $this->config["site_name"];
+              $mail_body = 
+              $user_data->name . ","
+              . "\n\n"
+              . $this->translation->translate("You have requested to reset password at") 
+              . " " 
+              . $this->config["site_name"]
+              . "\n"
+              . $this->translation->translate("Your temporary password is") 
+              . " "
+              . $password_reset;
+              if (!empty($template = $mail->template("password-reset.php"))) {
+                foreach (get_object_vars($user_data) as $key => $value) {
+                  if ($key != "password" && $key != "passcode") {
+                    $template = str_replace("{{" . $key . "}}", $value, $template);
+                  }
+                }
+                $template = str_replace("{{password}}", $password_reset, $template);
+                $template = str_replace("{{hash}}", $hash_data->hash, $template);
+                $mail_body = $template;
+              }
+              $mail->send(
+                $this->config["email"], 
+                $this->config["site_name"], 
+                $user_data->email, 
+                null,
+                null,
+                $mail_subject, 
+                $mail_body
+              );
+            } catch (Exception $e) {
+              throw new Exception($e->getMessage(), $e->getCode());
+            }
           }
   
-        } else {
-          return $data;
+          $this->log->log(
+            __FUNCTION__,
+            __METHOD__,
+            "normal",
+            func_get_args(),
+            (!empty($this->module) && isset($this->module->id) ? $this->module->id : ""),
+            "id",
+            $password_reset_hash,
+          );
+          return Utilities::callback(
+            __METHOD__, 
+            func_get_args(), 
+            true,
+            $this->session,
+            $this->controls,
+            $this->id
+          );
+
         }
 
       } else {
@@ -2631,10 +2707,8 @@ class User {
         && $this->validation->require($password, "Password")
       ) {
   
-        $password_hash = hash("sha256", md5($password . $this->config["password_salt"]));
         $filters = array(
-          "active" => true,
-          "password" => $password_hash
+          "active" => true
         );
         $extensions = array(
           array(
@@ -2648,10 +2722,16 @@ class User {
             "key" => "email",
             "operator" => "=",
             "value" => "'" . $username . "'",
+          ),
+          array(
+            "conjunction" => "OR",
+            "key" => "phone",
+            "operator" => "=",
+            "value" => "'" . $username . "'",
           )
         );
         if (!empty(
-          $this->database->select(
+          $data = $this->database->select(
             "user", 
             "*", 
             $filters, 
@@ -2660,7 +2740,37 @@ class User {
             false
           )
         )) {
-          return true;
+
+          $password_hash = hash("sha256", md5($password . $this->config["password_salt"]));
+          $filters["password"] = hash("sha256", md5($password . $this->config["password_salt"]));
+  
+          $data_password = $this->database->select(
+            "user", 
+            "*", 
+            $filters, 
+            $extensions, 
+            true,
+            false
+          );
+          
+          $data_hash = $this->database->select(
+            "hash", 
+            "*", 
+            array(
+              "hash" => $password_hash,
+              "content" => $data->id
+            ), 
+            null, 
+            true,
+            false
+          );
+  
+          if (!empty($data_password) || !empty($data_hash)) {
+            return true;
+          } else {
+            throw new Exception($message, 401);
+          }
+
         } else {
           throw new Exception($message, 401);
         }
