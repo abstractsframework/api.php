@@ -449,7 +449,7 @@ class Module {
           $parameters["table_columns"] = serialize($parameters["table_columns"]);
         }
       }
-      if (!$update) {
+      if (empty($update)) {
         if (isset($parameters["id"])) {
           $parameters["id"] = $parameters["id"];
         } else {

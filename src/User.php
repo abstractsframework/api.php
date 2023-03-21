@@ -2799,7 +2799,7 @@ class User {
 
   function inform($parameters, $update = false, $user_id = 0) {
     if (!empty($parameters)) {
-      if (!$update) {
+      if (empty($update)) {
         if (isset($parameters["id"])) {
           $parameters["id"] = $parameters["id"];
         } else {
@@ -2807,6 +2807,30 @@ class User {
         }
         if (!isset($parameters["username"]) || empty($parameters["username"])) {
           $parameters["username"] = $this->random_username();
+        }
+        if (!isset($parameters["email"]) || empty($parameters["email"])) {
+          $parameters["email"] = "";
+        }
+        if (!isset($parameters["nick_name"]) || empty($parameters["nick_name"])) {
+          $parameters["nick_name"] = "";
+        }
+        if (!isset($parameters["name"]) || empty($parameters["name"])) {
+          $parameters["name"] = "";
+        }
+        if (!isset($parameters["last_name"]) || empty($parameters["last_name"])) {
+          $parameters["last_name"] = "";
+        }
+        if (!isset($parameters["image"]) || empty($parameters["image"])) {
+          $parameters["image"] = "";
+        }
+        if (!isset($parameters["phone"]) || empty($parameters["phone"])) {
+          $parameters["phone"] = "";
+        }
+        if (!isset($parameters["passcode"]) || empty($parameters["passcode"])) {
+          $parameters["passcode"] = "";
+        }
+        if (!isset($parameters["passcode"]) || empty($parameters["passcode"])) {
+          $parameters["passcode"] = "";
         }
         $parameters["active"] = (isset($parameters["active"]) ? $parameters["active"] : true);
         $parameters["user_id"] = (!empty($user_id) ? $user_id : (!empty($this->session) ? $this->session->id : 0));
@@ -2819,7 +2843,7 @@ class User {
         unset($parameters["password"]);
       }
       
-      if (isset($parameters["image"])) {
+      if (isset($parameters["image"]) && !empty($parameters["image"])) {
         if (
           is_string($parameters["image"])
           && base64_decode($parameters["image"], true) !== false 
@@ -2861,27 +2885,27 @@ class User {
       }
       if (isset($parameters["email_verified"])) {
         unset($parameters["email_verified"]);
-        if (empty($update) || (isset($parameters["email"]) && !empty($parameters["email"]))) {
-          $parameters["email_verified"] = 0;
-        }
+      }
+      if (empty($update) || (isset($parameters["email"]) && !empty($parameters["email"]))) {
+        $parameters["email_verified"] = 0;
       }
       if (isset($parameters["phone_verified"])) {
         unset($parameters["phone_verified"]);
-        if (empty($update) || (isset($parameters["phone"]) && !empty($parameters["phone"]))) {
-          $parameters["phone_verified"] = 0;
-        }
+      }
+      if (empty($update) || (isset($parameters["phone"]) && !empty($parameters["phone"]))) {
+        $parameters["phone_verified"] = 0;
       }
       if (isset($parameters["ndid_verified"])) {
         unset($parameters["ndid_verified"]);
-        if (empty($update)) {
-          $parameters["ndid_verified"] = 0;
-        }
+      }
+      if (empty($update)) {
+        $parameters["ndid_verified"] = 0;
       }
       if (isset($parameters["face_verified"])) {
         unset($parameters["face_verified"]);
-        if (empty($update)) {
-          $parameters["face_verified"] = 0;
-        }
+      }
+      if (empty($update)) {
+        $parameters["face_verified"] = 0;
       }
     }
     return Utilities::callback(

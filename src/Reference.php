@@ -452,7 +452,7 @@ class Reference {
           $parameters["input_option_static_value"] = implode(",", $parameters["input_option_static_value"]);
         }
       }
-      if (!$update) {
+      if (empty($update)) {
         if (isset($parameters["id"])) {
           $parameters["id"] = $parameters["id"];
         } else {

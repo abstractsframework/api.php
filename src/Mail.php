@@ -981,7 +981,7 @@ class Mail {
 
   function inform($parameters, $update = false, $user_id = 0) {
     if (!empty($parameters)) {
-      if (!$update) {
+      if (empty($update)) {
         if (isset($parameters["id"])) {
           $parameters["id"] = $parameters["id"];
         } else {
