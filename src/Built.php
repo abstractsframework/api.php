@@ -1598,6 +1598,20 @@ class Built {
             }
           }
 
+        } else {
+          if (empty($update)) {
+            $parameters[$key] = null;
+            if (in_array($reference->type, $this->multiple_types)) {
+              if (
+                empty($reference->input_multiple_format)
+                || $reference->input_multiple_format == "serialize"
+              ) {
+                $parameters[$key] = serialize(array());
+              } else {
+                $parameters[$key] = null;
+              }
+            }
+          }
         }
       }
       
