@@ -157,7 +157,7 @@ class Database {
       if (!empty($filters) || !empty($extensions) || !empty($controls)) {
         if (empty($clean_keys)) {
           $columns = $this->columns($table);
-          $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+          $clean_keys = array_map(function($value) { return $value; }, $columns);
         }
         if (!empty($filters)) {
           $filters = $this->clean_filters($filters, $clean_keys);
@@ -260,7 +260,7 @@ class Database {
       if (!empty($filters) || !empty($extensions) || !empty($controls)) {
         if (empty($clean_keys)) {
           $columns = $this->columns($table);
-          $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+          $clean_keys = array_map(function($value) { return $value; }, $columns);
         }
         if (!empty($filters)) {
           $filters = $this->clean_filters($filters, $clean_keys);
@@ -361,7 +361,7 @@ class Database {
       if (!empty($filters) || !empty($extensions) || !empty($controls)) {
         if (empty($clean_keys)) {
           $columns = $this->columns($table);
-          $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+          $clean_keys = array_map(function($value) { return $value; }, $columns);
         }
         if (!empty($filters)) {
           $filters = $this->clean_filters($filters, $clean_keys);
@@ -448,7 +448,7 @@ class Database {
       $clean_keys = is_array($clean_keys) ? $clean_keys : array();
       if (empty($clean_keys)) {
         $columns = $this->columns($table);
-        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        $clean_keys = array_map(function($value) { return $value; }, $columns);
       }
       if (!empty($controls)) {
         $controls = $this->clean_controls($controls, $clean_keys);
@@ -533,7 +533,7 @@ class Database {
       $clean_keys = is_array($clean_keys) ? $clean_keys : array();
       if (empty($clean_keys)) {
         $columns = $this->columns($table);
-        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        $clean_keys = array_map(function($value) { return $value; }, $columns);
       }
       if (!empty($controls)) {
         $controls = $this->clean_controls($controls, $clean_keys);
@@ -637,7 +637,7 @@ class Database {
       $clean_keys = is_array($clean_keys) ? $clean_keys : array();
       if (empty($clean_keys)) {
         $columns = $this->columns($table);
-        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        $clean_keys = array_map(function($value) { return $value; }, $columns);
       }
       if (!empty($filters)) {
         $filters = $this->clean_filters($filters, $clean_keys);
@@ -739,7 +739,7 @@ class Database {
       $clean_keys = is_array($clean_keys) ? $clean_keys : array();
       if (empty($clean_keys)) {
         $columns = $this->columns($table);
-        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        $clean_keys = array_map(function($value) { return $value; }, $columns);
       }
       if (!empty($extensions)) {
         $extensions = $this->clean_extensions($extensions, $clean_keys);
@@ -851,7 +851,7 @@ class Database {
       $clean_keys = is_array($clean_keys) ? $clean_keys : array();
       if (empty($clean_keys)) {
         $columns = $this->columns($table);
-        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        $clean_keys = array_map(function($value) { return $value; }, $columns);
       }
       if (!empty($filters)) {
         $filters = $this->clean_filters($filters, $clean_keys);
@@ -931,7 +931,7 @@ class Database {
       $clean_keys = is_array($clean_keys) ? $clean_keys : array();
       if (empty($clean_keys)) {
         $columns = $this->columns($table);
-        $clean_keys = array_map(function($value) { return $value["COLUMN_NAME"]; }, $columns);
+        $clean_keys = array_map(function($value) { return $value; }, $columns);
       }
       if (!empty($extensions)) {
         $extensions = $this->clean_extensions($extensions, $clean_keys);
@@ -1558,7 +1558,8 @@ class Database {
         if ($result = mysqli_query($connection, $query)) {
           $rows = array();
           while($row = $result->fetch_assoc()) {
-            array_push($rows, $row);
+            array_push($rows, $row["COLUMN_NAME"]);
+            array_push($rows, $table . "." . $row["COLUMN_NAME"]);
           }
           $list = $rows;
           mysqli_free_result($result);

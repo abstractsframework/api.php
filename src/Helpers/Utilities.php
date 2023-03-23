@@ -605,14 +605,16 @@ class Utilities {
 
   public static function in_extensions($key, $extensions) {
     if (is_array($extensions)) {
-      if (isset($extensions["extensions"])) {
+      if (isset($extensions["extensions"]) && !empty($extensions["extensions"])) {
         return Utilities::in_extensions($key, $extensions["extensions"]);
       } else {
-        if (isset($extensions["key"]) && $extensions["key"] == $key) {
-          return true;
-        } else {
-          return false;
+        $in = false;
+        foreach ($extensions as $extension) {
+          if (isset($extension["key"]) && $extension["key"] == $key) {
+            $in = true;
+          }
         }
+        return $in;
       }
     } else {
       return false;
