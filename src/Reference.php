@@ -501,15 +501,13 @@ class Reference {
         }
   
         if (Utilities::in_referers("user_id", $referers)) {
-          if (isset($referers["user_id"])) {
-            $data->user_id_reference = $referers["user_id"]->format(
-              $this->database->get_reference(
-                $data->user_id,
-                "user",
-                "id"
-              )
-            );
-          }
+          $data->user_id_reference = $referers["user_id"]->format(
+            $this->database->get_reference(
+              $data->user_id,
+              "user",
+              "id"
+            )
+          );
         }
   
       }
