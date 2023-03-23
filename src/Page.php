@@ -464,14 +464,17 @@ class Page {
       $data = array();
     
       if (!empty($return_references)) {
-        if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+        if (Utilities::in_references("module_id", $return_references)) {
           $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
         }
-        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (Utilities::in_references("user_id", $return_references)) {
           $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
         }
-        if ($return_references === true || (is_array($return_references) && in_array("language_id", $return_references))) {
+        if (Utilities::in_references("language_id", $return_references)) {
           $data["language_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
+        }
+        if (Utilities::in_references("translate", $return_references)) {
+          $data["translate"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
         }
       }
   
@@ -489,8 +492,8 @@ class Page {
           $data->active = false;
         }
   
-        if ($return_references === true || (is_array($return_references) && in_array("translate", $return_references))) {
-          $data->translate_reference = $this->format(
+        if (Utilities::in_referers("translate", $referers)) {
+          $data->translate_reference = $referers["translate"]->format(
             $this->database->get_reference(
               $data->translate, 
               "page", 
@@ -499,43 +502,34 @@ class Page {
             true
           );
         }
-  
-        if (is_array($referers) && !empty($referers)) {
-          if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
-            if (isset($referers["module_id"])) {
-              $data->module_id_reference = $referers["module_id"]->format(
-                $this->database->get_reference(
-                  $data->module_id, 
-                  "module", 
-                  "id"
-                ),
-                true
-              );
-            }
-          }
-          if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-            if (isset($referers["user_id"])) {
-              $data->user_id_reference = $referers["user_id"]->format(
-                $this->database->get_reference(
-                  $data->user_id,
-                  "user",
-                  "id"
-                )
-              );
-            }
-          }
-          if ($return_references === true || (is_array($return_references) && in_array("language_id", $return_references))) {
-            if (isset($referers["language_id"])) {
-              $data->language_id_reference = $referers["language_id"]->format(
-                $this->database->get_reference(
-                  $data->language_id, 
-                  "language", 
-                  "id"
-                ),
-                true
-              );
-            }
-          }
+        if (Utilities::in_referers("module_id", $referers)) {
+          $data->module_id_reference = $referers["module_id"]->format(
+            $this->database->get_reference(
+              $data->module_id, 
+              "module", 
+              "id"
+            ),
+            true
+          );
+        }
+        if (Utilities::in_referers("user_id", $referers)) {
+          $data->user_id_reference = $referers["user_id"]->format(
+            $this->database->get_reference(
+              $data->user_id,
+              "user",
+              "id"
+            )
+          );
+        }
+        if (Utilities::in_referers("language_id", $referers)) {
+          $data->language_id_reference = $referers["language_id"]->format(
+            $this->database->get_reference(
+              $data->language_id, 
+              "language", 
+              "id"
+            ),
+            true
+          );
         }
   
       }

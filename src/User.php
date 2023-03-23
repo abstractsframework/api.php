@@ -2988,7 +2988,7 @@ class User {
           $data->image_reference->large = Utilities::get_large($data->image_reference->original);
         }
   
-        if ($return_references === true || (is_array($return_references) && in_array("members", $return_references))) {
+        if (Utilities::in_references("members", $return_references)) {
           if (!empty(
             $member_list = $this->database->select_multiple(
               "member", 
@@ -3007,7 +3007,7 @@ class User {
           }
         }
   
-        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (Utilities::in_references("user_id", $return_references)) {
           $data->user_id_reference = $this->format(
             $this->database->get_reference(
               $data->user_id, 

@@ -767,7 +767,7 @@ class Group {
               $data->active = false;
             }
 
-            if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+            if (Utilities::in_references("user_id", $return_references)) {
               $data->user_id_reference = $this->format(
                 $this->database->get_reference(
                   $data->user_id, 
@@ -1060,7 +1060,7 @@ class Group {
       $data = array();
     
       if (!empty($return_references)) {
-        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (Utilities::in_references("user_id", $return_references)) {
           $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
         }
       }
@@ -1086,7 +1086,7 @@ class Group {
             $value["behaviors"] = explode(",", $value["behaviors"]);
             return $value;
           }, $data->controls);
-          if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+          if (Utilities::in_references("module_id", $return_references)) {
             $data->controls = array_map(function($value) {
               if (!empty(
                 $module_data = $this->database->select(
@@ -1105,7 +1105,7 @@ class Group {
           }
         }
         
-        if ($return_references === true || (is_array($return_references) && in_array("members", $return_references))) {
+        if (Utilities::in_references("members", $return_references)) {
           $data->members = array_map(function($value) { 
             if ($value->active === "1") {
               $value->active = true;
@@ -1127,18 +1127,14 @@ class Group {
           ));
         }
   
-        if (is_array($referers) && !empty($referers)) {
-          if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-            if (isset($referers["user_id"])) {
-              $data->user_id_reference = $referers["user_id"]->format(
-                $this->database->get_reference(
-                  $data->user_id,
-                  "user",
-                  "id"
-                )
-              );
-            }
-          }
+        if (Utilities::in_referers("user_id", $referers)) {
+          $data->user_id_reference = $referers["user_id"]->format(
+            $this->database->get_reference(
+              $data->user_id,
+              "user",
+              "id"
+            )
+          );
         }
   
       }

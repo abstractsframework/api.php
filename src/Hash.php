@@ -441,7 +441,7 @@ class Hash {
       $data = array();
     
       if (!empty($return_references)) {
-        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (Utilities::in_references("user_id", $return_references)) {
           $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
         }
       }

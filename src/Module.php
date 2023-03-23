@@ -474,10 +474,10 @@ class Module {
       $data = array();
     
       if (!empty($return_references)) {
-        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (Utilities::in_references("user_id", $return_references)) {
           $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
         }
-        if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
+        if (Utilities::in_references("page_id", $return_references)) {
           $data["page_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
         }
       }
@@ -496,28 +496,24 @@ class Module {
           $data->active = false;
         }
   
-        if (is_array($referers) && !empty($referers)) {
-          if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-            if (isset($referers["user_id"])) {
-              $data->user_id_reference = $referers["user_id"]->format(
-                $this->database->get_reference(
-                  $data->user_id,
-                  "user",
-                  "id"
-                )
-              );
-            }
-          }
-          if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
-            $data->page_id_reference = $this->format(
-              $this->database->get_reference(
-                $data->page_id, 
-                "page", 
-                "id"
-              ),
-              true
-            );
-          }
+        if (Utilities::in_referers("user_id", $referers)) {
+          $data->user_id_reference = $referers["user_id"]->format(
+            $this->database->get_reference(
+              $data->user_id,
+              "user",
+              "id"
+            )
+          );
+        }
+        if (Utilities::in_referers("page_id", $referers)) {
+          $data->page_id_reference = $this->format(
+            $this->database->get_reference(
+              $data->page_id, 
+              "page", 
+              "id"
+            ),
+            true
+          );
         }
   
         $data->default_controls = explode(",", $data->default_controls);

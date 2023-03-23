@@ -450,10 +450,10 @@ class Control {
       $data = array();
     
       if (!empty($return_references)) {
-        if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+        if (Utilities::in_references("module_id", $return_references)) {
           $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
         }
-        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (Utilities::in_references("user_id", $return_references)) {
           $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
         }
       }
@@ -476,30 +476,24 @@ class Control {
           $data->behaviors = explode(",", $data->behaviors);
         }
   
-        if (is_array($referers) && !empty($referers)) {
-          if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
-            if (isset($referers["module_id"])) {
-              $data->module_id_reference = $referers["module_id"]->format(
-                $this->database->get_reference(
-                  $data->module_id, 
-                  "module", 
-                  "id"
-                ),
-                false
-              );
-            }
-          }
-          if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
-            if (isset($referers["user_id"])) {
-              $data->user_id_reference = $referers["user_id"]->format(
-                $this->database->get_reference(
-                  $data->user_id,
-                  "user",
-                  "id"
-                )
-              );
-            }
-          }
+        if (Utilities::in_referers("module_id", $referers)) {
+          $data->module_id_reference = $referers["module_id"]->format(
+            $this->database->get_reference(
+              $data->module_id, 
+              "module", 
+              "id"
+            ),
+            false
+          );
+        }
+        if (Utilities::in_referers("user_id", $referers)) {
+          $data->user_id_reference = $referers["user_id"]->format(
+            $this->database->get_reference(
+              $data->user_id,
+              "user",
+              "id"
+            )
+          );
         }
   
       }

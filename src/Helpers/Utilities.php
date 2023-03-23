@@ -567,6 +567,56 @@ class Utilities {
     }
   }
 
+  public static function in_references($key, $return_references) {
+    if (
+      $return_references === true 
+      || (is_array($return_references) && in_array($key, $return_references))
+      || (is_string($return_references) && strpos($return_references, $key) >= 0)
+    ) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  public static function in_referers($key, $referers) {
+    if (
+      is_array($referers) 
+      && !empty($referers) 
+      && isset($referers[$key]) 
+      && !empty($referers[$key])
+    ) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  public static function in_filters($key, $filters) {
+    if (
+      (is_array($filters) && in_array($key, $filters))
+      || (is_string($filters) && strpos($filters, $key) >= 0)
+    ) {
+      return true;
+    } else {
+      return false;
+    }
+  }
+
+  public static function in_extensions($key, $extensions) {
+    if (is_array($extensions)) {
+      if (isset($extensions["extensions"])) {
+        return Utilities::in_extensions($key, $extensions["extensions"]);
+      } else {
+        if (isset($extensions["key"]) && $extensions["key"] == $key) {
+          return true;
+        }
+      }
+    } else {
+      return false;
+    }
+  }
+
   public static function callback($function, $arguments, $result, $session, $controls, $identifier) {
     $names = explode("::", $function);
     $class = Utilities::create_class_name($identifier);

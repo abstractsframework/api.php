@@ -157,23 +157,27 @@ class Built {
           $result = $this->$function(
             $parameters,
             null,
-            $_FILES
+            $_FILES, 
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
           );
         } else if ($function == "update") {
           $result = $this->$function(
             (isset($parameters["id"]) ? $parameters["id"] : null),
             (isset($parameters) ? $parameters : null),
-            $_FILES
+            $_FILES, 
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
           );
         } else if ($function == "patch") {
           $result = $this->$function(
             (isset($parameters["id"]) ? $parameters["id"] : null),
             (isset($parameters) ? $parameters : null),
-            $_FILES
+            $_FILES, 
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
           );
         } else if ($function == "delete") {
           $result = $this->$function(
-            (isset($parameters["id"]) ? $parameters["id"] : null)
+            (isset($parameters["id"]) ? $parameters["id"] : null), 
+            (isset($parameters["return_references"]) ? $parameters["return_references"] : false)
           );
         } else if ($function == "upload") {
           $result = $this->$function(
@@ -513,7 +517,7 @@ class Built {
     }
   }
 
-  function create($parameters, $user_id = 0, $files = null) {
+  function create($parameters, $user_id = 0, $files = null, $return_references = null, $format = true) {
       
     /* initialize: parameters */
     $parameters = $this->inform($parameters, false, $user_id);
@@ -552,7 +556,7 @@ class Built {
           return Utilities::callback(
             __METHOD__, 
             func_get_args(), 
-            $this->format($data),
+            $format === true ? $this->format($data, $return_references) : $data,
             $this->session,
             $this->controls,
             $this->identifier
@@ -570,7 +574,7 @@ class Built {
 
   }
 
-  function update($id, $parameters, $files = null) {
+  function update($id, $parameters, $files = null, $return_references = null, $format = true) {
     
     /* initialize: parameters */
     $parameters = $this->inform($parameters, $id);
@@ -615,7 +619,7 @@ class Built {
           return Utilities::callback(
             __METHOD__, 
             func_get_args(), 
-            $this->format($data),
+            $format === true ? $this->format($data, $return_references) : $data,
             $this->session,
             $this->controls,
             $this->identifier
@@ -634,7 +638,7 @@ class Built {
 
   }
 
-  function patch($id, $parameters, $files = null) {
+  function patch($id, $parameters, $files = null, $return_references = null, $format = true) {
 
     /* initialize: parameters */
     $parameters = $this->inform($parameters, $id);
@@ -679,7 +683,7 @@ class Built {
           return Utilities::callback(
             __METHOD__, 
             func_get_args(), 
-            $this->format($data),
+            $format === true ? $this->format($data, $return_references) : $data,
             $this->session,
             $this->controls,
             $this->identifier
@@ -697,7 +701,7 @@ class Built {
 
   }
 
-  function delete($id) {
+  function delete($id, $return_references = null, $format = true) {
     if ($this->validation->require($id, "ID")) {
       $data = $this->database->delete(
         (!empty($this->module) && isset($this->module->database_table) ? $this->module->database_table : ""), 
@@ -781,7 +785,7 @@ class Built {
         return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $this->format($data),
+          $format === true ? $this->format($data, $return_references) : $data,
           $this->session,
           $this->controls,
           $this->identifier
@@ -1309,7 +1313,8 @@ class Built {
     $active = null, 
     $filters = array(), 
     $extensions = array(), 
-    $return_references = false
+    $return_references = false,
+    $format = true
   ) {
 
     $start = Initialize::start($start);
@@ -1341,14 +1346,10 @@ class Built {
         $this->controls["view"]
       );
       if (!empty($list)) {
-        $data = array();
-        foreach ($list as $value) {
-          array_push($data, $this->format($value, $return_references));
-        }
         return Utilities::callback(
           __METHOD__, 
           func_get_args(), 
-          $data,
+          $format === true ? $this->format($list, $return_references) : $list,
           $this->session,
           $this->controls,
           $this->identifier
@@ -1630,44 +1631,41 @@ class Built {
 
     /* function: create referers before format (better performance for list) */
     $refer = function ($return_references = false, $abstracts_override = null) {
-
       $data = array();
-      
       if (!empty($return_references)) {
-  
-        if ($return_references === true || (is_array($return_references) && in_array("module_id", $return_references))) {
+        if (Utilities::in_references("module_id", $return_references)) {
           if (!empty($this->abstracts->component_module)) {
             $data["module_id"] = new Module($this->session, Utilities::override_controls(true, true, true, true));
           }
         }
-        if ($return_references === true || (is_array($return_references) && in_array("user_id", $return_references))) {
+        if (Utilities::in_references("user_id", $return_references)) {
           if (!empty($this->abstracts->component_user)) {
             $data["user_id"] = new User($this->session, Utilities::override_controls(true, true, true, true));
           }
         }
-        if ($return_references === true || (is_array($return_references) && in_array("group_id", $return_references))) {
+        if (Utilities::in_references("group_id", $return_references)) {
           if (!empty($this->abstracts->component_group)) {
             $data["group_id"] = new Group($this->session, Utilities::override_controls(true, true, true, true));
           }
         }
-        if ($return_references === true || (is_array($return_references) && in_array("language_id", $return_references))) {
+        if (Utilities::in_references("language_id", $return_references)) {
           if (!empty($this->abstracts->component_language)) {
             $data["language_id"] = new Language($this->session, Utilities::override_controls(true, true, true, true));
           }
         }
-        if ($return_references === true || (is_array($return_references) && in_array("page_id", $return_references))) {
+        if (Utilities::in_references("page_id", $return_references)) {
           if (!empty($this->abstracts->component_page)) {
             $data["page_id"] = new Page($this->session, Utilities::override_controls(true, true, true, true));
           }
         }
-        if ($return_references === true || (is_array($return_references) && in_array("media_id", $return_references))) {
+        if (Utilities::in_references("media_id", $return_references)) {
           if (!empty($this->abstracts->component_media)) {
             $data["media_id"] = new Media($this->session, Utilities::override_controls(true, true, true, true));
           }
         }
         foreach ($this->abstracts->references as $reference) {
           $reference_key = $reference->key;
-          if ($return_references === true || (is_array($return_references) && in_array($reference_key, $return_references))) {
+          if (Utilities::in_references($reference_key, $return_references)) {
             if (
               $reference->input_option == "dynamic"
               && !empty($reference->input_option_dynamic_module)
@@ -1717,13 +1715,7 @@ class Built {
           $data->active = false;
         }
   
-        if (
-          $return_references === true || (
-            is_array($return_references) 
-            && is_array($return_references) && in_array("module_id", $return_references)
-            && is_array($referers) && !empty($referers) && isset($referers["module_id"]) && !empty($referers["module_id"])
-          )
-        ) {
+        if (Utilities::in_referers("module_id", $referers)) {
           if (isset($data->module_id)) {
             $data->module_id_reference = null;
             if (!empty($data->module_id)) {
@@ -1737,13 +1729,7 @@ class Built {
             }
           }
         }
-        if (
-          $return_references === true || (
-            is_array($return_references) 
-            && is_array($return_references) && in_array("user_id", $return_references)
-            && is_array($referers) && !empty($referers) && isset($referers["user_id"]) && !empty($referers["user_id"])
-          )
-        ) {
+        if (Utilities::in_referers("user_id", $referers)) {
           if (isset($data->user_id)) {
             $data->user_id_reference = null;
             if (!empty($data->user_id)) {
@@ -1757,13 +1743,7 @@ class Built {
             }
           }
         }
-        if (
-          $return_references === true || (
-            is_array($return_references) 
-            && is_array($return_references) && in_array("group_id", $return_references)
-            && is_array($referers) && !empty($referers) && isset($referers["group_id"]) && !empty($referers["group_id"])
-          )
-        ) {
+        if (Utilities::in_referers("group_id", $referers)) {
           if (isset($data->group_id)) {
             $data->group_id_reference = null;
             if (!empty($data->group_id)) {
@@ -1777,13 +1757,7 @@ class Built {
             }
           }
         }
-        if (
-          $return_references === true || (
-            is_array($return_references) 
-            && is_array($return_references) && in_array("language_id", $return_references)
-            && is_array($referers) && !empty($referers) && isset($referers["language_id"]) && !empty($referers["language_id"])
-          )
-        ) {
+        if (Utilities::in_referers("language_id", $referers)) {
           if (isset($data->language_id)) {
             $data->language_id_reference = null;
             if (!empty($data->language_id)) {
@@ -1797,13 +1771,7 @@ class Built {
             }
           }
         }
-        if (
-          $return_references === true || (
-            is_array($return_references) 
-            && is_array($return_references) && in_array("page_id", $return_references)
-            && is_array($referers) && !empty($referers) && isset($referers["page_id"]) && !empty($referers["page_id"])
-          )
-        ) {
+        if (Utilities::in_referers("page_id", $referers)) {
           if (isset($data->page_id)) {
             $data->page_id_reference = null;
             if (!empty($data->page_id)) {
@@ -1817,13 +1785,7 @@ class Built {
             }
           }
         }
-        if (
-          $return_references === true || (
-            is_array($return_references) 
-            && is_array($return_references) && in_array("media_id", $return_references)
-            && is_array($referers) && !empty($referers) && isset($referers["media_id"]) && !empty($referers["media_id"])
-          )
-        ) {
+        if (Utilities::in_referers("media_id", $referers)) {
           if (isset($data->media_id)) {
             $data->media_id_reference = null;
             if (!empty($data->media_id)) {
@@ -1837,14 +1799,7 @@ class Built {
             }
           }
         }
-        if (
-          (
-            $return_references === true || (
-              is_array($return_references) 
-              && is_array($return_references) && in_array("translations", $return_references)
-            )
-          ) && !empty($this->abstracts->component_language)
-        ) {
+        if (Utilities::in_referers("translations", $referers)) {
           $translations = $this->list(
             null, 
             null, 
@@ -1968,7 +1923,7 @@ class Built {
               }
             }
             
-            if (is_array($referers) && !empty($referers) && isset($referers[$key])) {
+            if (Utilities::in_referers($key, $referers)) {
               if (is_array($data->$key)) {
                 $data->$reference_key = array_map(
                   function ($value, $referer, $reference) {
