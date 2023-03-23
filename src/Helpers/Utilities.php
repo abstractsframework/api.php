@@ -610,6 +610,8 @@ class Utilities {
       } else {
         if (isset($extensions["key"]) && $extensions["key"] == $key) {
           return true;
+        } else {
+          return false;
         }
       }
     } else {
