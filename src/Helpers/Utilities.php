@@ -47,6 +47,26 @@ class Utilities {
         }
       }
     }
+    
+    $get_advanced = array();
+    if (isset($_SERVER["QUERY_STRING"]) && !empty($_SERVER["QUERY_STRING"])) {
+      $parameters = explode("&", $_SERVER["QUERY_STRING"]);
+      foreach ($parameters as $parameter) {
+        $parameter = explode("=", urldecode($parameter));
+        $key = $parameter[0];
+        $value = $parameter[1];
+        if (!in_array($key, $rest_parameters)) {
+          $get_advanced[$key] = $arrange($value);
+          if (strpos($key, ".") >= 0) {
+            if (isset($get[str_replace(".", "_", $key)])) {
+              unset($get[str_replace(".", "_", $key)]);
+            }
+          }
+        } else {
+          unset($get_advanced[$key]);
+        }
+      }
+    }
 
     $post = array();
     if (isset($_POST) && !empty($_POST)) {
@@ -135,7 +155,7 @@ class Utilities {
 
     }
     
-    return array_merge($get, $post, $json, $data);
+    return array_merge($get, $get_advanced, $post, $json, $data);
 
   }
 
@@ -594,10 +614,10 @@ class Utilities {
 
   public static function in_filters($key, $filters) {
     if (
-      (is_array($filters) && in_array($key, $filters))
+      (is_array($filters) && array_key_exists($key, $filters))
       || (is_string($filters) && strpos($filters, $key) >= 0)
     ) {
-      return true;
+      return $filters[$key];
     } else {
       return false;
     }
@@ -605,13 +625,14 @@ class Utilities {
 
   public static function in_extensions($key, $extensions) {
     if (is_array($extensions)) {
-      if (isset($extensions["extensions"]) && !empty($extensions["extensions"])) {
+      if (array_key_exists("extensions", $extensions) && !empty($extensions["extensions"])) {
         return Utilities::in_extensions($key, $extensions["extensions"]);
       } else {
         $in = false;
         foreach ($extensions as $extension) {
           if (isset($extension["key"]) && $extension["key"] == $key) {
-            $in = true;
+            unset($extension["key"]);
+            $in = $extension;
           }
         }
         return $in;

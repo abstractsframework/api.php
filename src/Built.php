@@ -1589,13 +1589,17 @@ class Built {
           if ($reference->type != "input-multiple") {
             $parameters[$key] = $inform($parameters, $reference);
           } else {
-            foreach ($reference->references as $reference_multiple) {
-              if (array_key_exists($reference_multiple->key, $parameters[$key])) {
-                $parameters[$key][$reference_multiple->key] = $inform(
-                  $parameters[$key], 
-                  $reference_multiple
-                );
+            if (!empty($reference->references)) {
+              foreach ($reference->references as $reference_multiple) {
+                if (array_key_exists($reference_multiple->key, $parameters[$key])) {
+                  $parameters[$key][$reference_multiple->key] = $inform(
+                    $parameters[$key], 
+                    $reference_multiple
+                  );
+                }
               }
+            } else {
+              $parameters[$key] = $inform($parameters, $reference);
             }
           }
 
